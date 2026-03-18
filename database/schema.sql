@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS users (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- Employees table (extended profile)
+-- Employees table
 CREATE TABLE IF NOT EXISTS employees (
     id TEXT PRIMARY KEY, -- Matches users.id
     first_name TEXT NOT NULL,
@@ -81,6 +81,9 @@ CREATE TABLE IF NOT EXISTS inquiries (
     name TEXT NOT NULL,
     email TEXT NOT NULL,
     phone TEXT,
+    company_name TEXT,
+    city TEXT,
+    product_name TEXT,
     reason TEXT NOT NULL,
     meeting_time DATETIME,
     status TEXT DEFAULT 'new', -- 'new', 'responded'
@@ -151,15 +154,13 @@ VALUES (
     );
 
 -- Seed data for Machines
-INSERT OR IGNORE INTO
-    machines (
+INSERT OR IGNORE INTO machines (
         name,
         model_number,
         description,
         specifications,
         price,
-        stock_quantity
-    )
+        stock_quantity)
 VALUES (
         'Hydraulic Press X1',
         'HP-X1-2024',

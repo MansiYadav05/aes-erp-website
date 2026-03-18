@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Mail, Phone, User, MessageSquare, Calendar, Clock, Send, CheckCircle } from 'lucide-react';
+import { Mail, Phone, User, MessageSquare, Calendar, Clock, Send, CheckCircle, Building, MapPin, Package } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 export const Contact = () => {
@@ -7,6 +7,9 @@ export const Contact = () => {
     name: '',
     email: '',
     phone: '',
+    companyName: '',
+    city: '',
+    productName: '',
     reason: '',
     meeting_date: '',
     meeting_time: ''
@@ -29,6 +32,9 @@ export const Contact = () => {
           name: formData.name,
           email: formData.email,
           phone: formData.phone,
+          companyName: formData.companyName,
+          city: formData.city,
+          productName: formData.productName,
           reason: formData.reason,
           meeting_time
         })
@@ -36,7 +42,7 @@ export const Contact = () => {
 
       if (response.ok) {
         setStatus('success');
-        setFormData({ name: '', email: '', phone: '', reason: '', meeting_date: '', meeting_time: '' });
+        setFormData({ name: '', email: '', phone: '', companyName: '', city: '', productName: '', reason: '', meeting_date: '', meeting_time: '' });
       } else {
         setStatus('error');
       }
@@ -184,6 +190,49 @@ export const Contact = () => {
                         onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                         className="w-full pl-12 pr-4 py-3.5 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black transition-all"
                         placeholder="+91 XXX XXX XXXX"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 ml-1">Company Name</label>
+                      <div className="relative">
+                        <Building className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+                        <input
+                          type="text"
+                          value={formData.companyName}
+                          onChange={(e) => setFormData({ ...formData, companyName: e.target.value })}
+                          className="w-full pl-12 pr-4 py-3.5 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black transition-all"
+                          placeholder="Your Company"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 ml-1">City</label>
+                      <div className="relative">
+                        <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+                        <input
+                          type="text"
+                          value={formData.city}
+                          onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                          className="w-full pl-12 pr-4 py-3.5 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black transition-all"
+                          placeholder="Your City"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 ml-1">Product Name</label>
+                    <div className="relative">
+                      <Package className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+                      <input
+                        type="text"
+                        value={formData.productName}
+                        onChange={(e) => setFormData({ ...formData, productName: e.target.value })}
+                        className="w-full pl-12 pr-4 py-3.5 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black transition-all"
+                        placeholder="e.g., CNC Milling Center"
                       />
                     </div>
                   </div>

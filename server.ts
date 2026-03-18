@@ -262,13 +262,13 @@ async function startServer() {
 
     // Contact Inquiries
     app.post("/api/contact", (req, res) => {
-      const { name, email, phone, reason, meeting_time } = req.body;
+      const { name, email, phone, companyName, city, productName, reason, meeting_time } = req.body;
       try {
         const stmt = db.prepare(`
-        INSERT INTO inquiries (name, email, phone, reason, meeting_time)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO inquiries (name, email, phone, company_name, city, product_name, reason, meeting_time)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `);
-        const result = stmt.run(name, email, phone, reason, meeting_time);
+        const result = stmt.run(name, email, phone, companyName, city, productName, reason, meeting_time);
         res.json({ success: true, id: result.lastInsertRowid });
       } catch (error) {
         res.status(500).json({ error: (error as Error).message });

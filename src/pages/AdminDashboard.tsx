@@ -414,60 +414,65 @@ export const AdminDashboard = () => {
               <motion.div key="inquiries" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
                 <h1 className="text-3xl font-bold mb-8">Contact Enquiries</h1>
                 <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
-                  <table className="w-full text-left">
-                    <thead className="bg-gray-50 border-b border-gray-100">
-                      <tr>
-                        <th className="px-8 py-5 text-xs font-bold text-gray-400 uppercase tracking-widest">Sender</th>
-                        <th className="px-8 py-5 text-xs font-bold text-gray-400 uppercase tracking-widest">Reason</th>
-                        <th className="px-8 py-5 text-xs font-bold text-gray-400 uppercase tracking-widest">Meeting</th>
-                        <th className="px-8 py-5 text-xs font-bold text-gray-400 uppercase tracking-widest">Status</th>
-                        <th className="px-8 py-5 text-xs font-bold text-gray-400 uppercase tracking-widest text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {inquiries.map((inq) => (
-                        <tr key={inq.id} className="hover:bg-gray-50 transition-colors">
-                          <td className="px-8 py-5">
-                            <p className="font-bold text-sm">{inq.name}</p>
-                            <p className="text-xs text-gray-400">{inq.email}</p>
-                          </td>
-                          <td className="px-8 py-5">
-                            <p className="text-sm text-gray-600 line-clamp-2">{inq.reason}</p>
-                          </td>
-                          <td className="px-8 py-5 text-sm text-gray-500">
-                            {inq.meeting_time ? new Date(inq.meeting_time).toLocaleString() : 'No meeting'}
-                          </td>
-                          <td className="px-8 py-5">
-                            <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase ${
-                              inq.status === 'new' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-600'
-                            }`}>
-                              {inq.status}
-                            </span>
-                          </td>
-                          <td className="px-8 py-5 text-right">
-                            <div className="flex justify-end space-x-2">
-                              {inq.status === 'new' && (
-                                <button 
-                                  onClick={() => handleUpdateInquiry(inq.id, 'responded')}
-                                  className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"
-                                  title="Mark as Responded"
-                                >
-                                  <CheckCircle className="w-4 h-4" />
-                                </button>
-                              )}
-                              <button 
-                                onClick={() => handleDeleteInquiry(inq.id)}
-                                className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                                title="Delete"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </td>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                      <thead className="bg-gray-50 border-b border-gray-100">
+                        <tr>
+                          <th className="px-8 py-5 text-xs font-bold text-gray-400 uppercase tracking-widest">Sender</th>
+                          <th className="px-8 py-5 text-xs font-bold text-gray-400 uppercase tracking-widest">Company Name</th>
+                          <th className="px-8 py-5 text-xs font-bold text-gray-400 uppercase tracking-widest">Product / Reason</th>
+                          <th className="px-8 py-5 text-xs font-bold text-gray-400 uppercase tracking-widest">Meeting</th>
+                          <th className="px-8 py-5 text-xs font-bold text-gray-400 uppercase tracking-widest">Status</th>
+                          <th className="px-8 py-5 text-xs font-bold text-gray-400 uppercase tracking-widest text-right">Actions</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {inquiries.map((inq) => (
+                          <tr key={inq.id} className="hover:bg-gray-50 transition-colors">
+                            <td className="px-8 py-5">
+                              <p className="font-bold text-sm">{inq.name}</p>
+                              <p className="text-xs text-gray-400">{inq.email}</p>
+                            </td>
+                            <td className="px-8 py-5 text-sm text-gray-600">{inq.company_name || 'N/A'}</td>
+                            <td className="px-8 py-5">
+                              <p className="font-bold text-sm">{inq.product_name || 'General Inquiry'}</p>
+                              <p className="text-xs text-gray-400 line-clamp-2">{inq.reason}</p>
+                            </td>
+                            <td className="px-8 py-5 text-sm text-gray-500">
+                              {inq.meeting_time ? new Date(inq.meeting_time).toLocaleString() : 'No meeting'}
+                            </td>
+                            <td className="px-8 py-5">
+                              <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase ${
+                                inq.status === 'new' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-600'
+                              }`}>
+                                {inq.status}
+                              </span>
+                            </td>
+                            <td className="px-8 py-5 text-right">
+                              <div className="flex justify-end space-x-2">
+                                {inq.status === 'new' && (
+                                  <button 
+                                    onClick={() => handleUpdateInquiry(inq.id, 'responded')}
+                                    className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"
+                                    title="Mark as Responded"
+                                  >
+                                    <CheckCircle className="w-4 h-4" />
+                                  </button>
+                                )}
+                                <button 
+                                  onClick={() => handleDeleteInquiry(inq.id)}
+                                  className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                                  title="Delete"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </motion.div>
             )}

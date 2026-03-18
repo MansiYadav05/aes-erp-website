@@ -22,7 +22,7 @@ export const Home = () => {
     }
   };
 
-  const c = content || defaultContent;
+  const hero = content?.hero || defaultContent.hero;
 
   return (
     <div className="bg-white">
@@ -30,7 +30,7 @@ export const Home = () => {
       <section className="relative h-[90vh] flex items-center overflow-hidden">
         <div className="absolute inset-0 z-0">
           <img
-            src={c.hero.image}
+            src={hero.image}
             alt="Industrial Machinery"
             className="w-full h-full object-cover brightness-50"
             referrerPolicy="no-referrer"
@@ -44,14 +44,14 @@ export const Home = () => {
             transition={{ duration: 0.8 }}
           >
             <span className="inline-block px-4 py-1.5 mb-6 text-xs font-semibold tracking-widest uppercase bg-emerald-600 rounded-full">
-              {c.hero.tag}
+              {hero.tag}
             </span>
             <h1 className="text-5xl md:text-7xl font-bold leading-tight mb-6">
-              {c.hero.title.split(' ').slice(0, 2).join(' ')} <br />
-              <span className="text-emerald-400">{c.hero.title.split(' ').slice(2).join(' ')}</span>
+              {hero.title.split(' ').slice(0, 2).join(' ')} <br />
+              <span className="text-emerald-400">{hero.title.split(' ').slice(2).join(' ')}</span>
             </h1>
             <p className="text-lg md:text-xl text-gray-200 max-w-2xl mb-10 leading-relaxed">
-              {c.hero.description}
+              {hero.description}
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
               <Link to="/products" className="px-8 py-4 bg-white text-black font-bold rounded-lg flex items-center justify-center hover:bg-gray-100 transition-all">
