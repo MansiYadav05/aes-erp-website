@@ -9,17 +9,17 @@ interface AuthContextType {
   isEmployee: boolean;
   profile: any | null;
   refreshProfile: () => Promise<void>;
-  syncUser: (role?: string) => Promise<void>;
+  syncUser: (role?: string, profileData?: { phone?: string; address?: string }) => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextType>({ 
-  user: null, 
-  loading: true, 
-  isAdmin: false, 
+const AuthContext = createContext<AuthContextType>({
+  user: null,
+  loading: true,
+  isAdmin: false,
   isEmployee: false,
   profile: null,
-  refreshProfile: async () => {},
-  syncUser: async () => {}
+  refreshProfile: async () => { },
+  syncUser: async () => { }
 });
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -41,7 +41,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, []);
 
-  const syncUser = useCallback(async (role?: string) => {
+  const syncUser = useCallback(async (role?: string, profileData?: { phone?: string; address?: string }) => {
     const currentUser = auth.currentUser;
     if (!currentUser) return;
 
@@ -53,16 +53,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           id: currentUser.uid,
           email: currentUser.email,
           displayName: currentUser.displayName || currentUser.email?.split('@')[0],
-          role: role
+          role: role,
+          phone: profileData?.phone,
+          address: profileData?.address
         })
       });
-      
+
       if (res.ok) {
         const { user: dbUser } = await res.json();
         const isSystemAdmin = dbUser.role === 'admin' || currentUser.email === 'admin@industrial.com';
         setIsAdmin(isSystemAdmin);
         setIsEmployee(dbUser.role === 'employee' && !isSystemAdmin);
-        
+
         if (dbUser.role === 'employee' && !isSystemAdmin) {
           await fetchProfile(currentUser.uid);
         } else {
