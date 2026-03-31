@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  User, Briefcase, Calendar, Clock, Bell, CheckCircle, 
-  DollarSign, MapPin, Phone, Mail, Award, ArrowRight,
-  TrendingUp, AlertCircle, X
+import {
+  User, Briefcase, Calendar, Clock, Bell, CheckCircle,
+  IndianRupee, MapPin, Phone, Mail, Award, ArrowRight, Loader,
+  TrendingUp, AlertCircle, X, Download
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { jsPDF } from 'jspdf';
 import { useAuth } from '../AuthContext';
 import { auth } from '../firebase';
 
@@ -16,6 +17,7 @@ export const EmployeeDashboard = () => {
   const [attendance, setAttendance] = useState<any[]>([]);
   const [salaryHistory, setSalaryHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isClockingIn, setIsClockingIn] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -53,19 +55,193 @@ export const EmployeeDashboard = () => {
     fetchEmployeeData();
   };
 
-  const handleMarkAttendance = async (status: string) => {
-    await fetch('/api/attendance', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ employee_id: user?.uid, status })
+  const handleMarkAttendance = async () => {
+    if (isClockingIn) return;
+
+    if (!navigator.geolocation) {
+      alert("Geolocation is not supported by your browser");
+      return;
+    }
+    setIsClockingIn(true);
+
+    navigator.geolocation.getCurrentPosition(async (position) => {
+      try {
+        const res = await fetch('/api/attendance/geo', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            employee_id: user?.uid,
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+          })
+        });
+
+        const data = await res.json();
+        if (res.ok) {
+          alert(data.message);
+          fetchEmployeeData();
+        } else {
+          alert(`ERROR: ${data.error}\nDistance from office: ${data.distance} meters.`);
+        }
+      } catch (error) {
+        console.error("Attendance error:", error);
+        alert("Failed to connect to server.");
+      } finally {
+        setIsClockingIn(false);
+      }
+    }, (error) => {
+      console.error("GPS Error:", error);
+      let msg = "Unable to retrieve your location.";
+      if (error.code === 1) msg = "Location permission denied. Please allow access.";
+      if (error.code === 2) msg = "Location unavailable. Check your GPS.";
+      if (error.code === 3) msg = "Location request timed out.";
+      alert(msg);
+      setIsClockingIn(false);
+    }, {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 0
     });
-    fetchEmployeeData();
-    alert(`Marked as ${status} for today!`);
   };
 
-  // Calculate attendance stats
   const presentDays = attendance.filter(a => a.status === 'present').length;
   const absentDays = attendance.filter(a => a.status === 'absent').length;
+  const completedTasksCount = tasks.filter(t => t.status === 'completed').length;
+
+
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Good Morning";
+    if (hour < 18) return "Good Afternoon";
+    return "Good Evening";
+  };
+
+  const handleDownloadSlip = (slip: any) => {
+    const doc = new jsPDF();
+
+    // Colors
+    const emerald = [0, 0, 0]; // Changed to Black as requested
+    const dark = [20, 20, 20];
+    const gray = [100, 100, 100];
+    const lightGray = [245, 245, 245];
+
+    // Header Background
+    doc.setFillColor(emerald[0], emerald[1], emerald[2]);
+    doc.rect(0, 0, 210, 50, 'F');
+
+    // Logo / Company Name
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(30);
+    doc.setFont("helvetica", "bold");
+    doc.text("AES", 20, 25);
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.text("Authensia Equipment Systems", 20, 32);
+    doc.text("Dehu Alandi Road, Pune", 20, 37);
+
+    // Title
+    doc.setFontSize(24);
+    doc.setFont("helvetica", "bold");
+    doc.text("PAYSLIP", 190, 25, { align: 'right' });
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "normal");
+    doc.text(slip.month_year, 190, 35, { align: 'right' });
+
+    let y = 80;
+
+    // Employee Section
+    doc.setTextColor(emerald[0], emerald[1], emerald[2]);
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    doc.text("EMPLOYEE DETAILS", 20, 70);
+    doc.setDrawColor(emerald[0], emerald[1], emerald[2]);
+    doc.setLineWidth(0.5);
+    doc.line(20, 73, 190, 73);
+
+    // Employee Info Grid
+    doc.setTextColor(gray[0], gray[1], gray[2]);
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "bold");
+
+    doc.text("NAME", 20, y);
+    doc.text("EMPLOYEE ID", 20, y + 10);
+    doc.text("DEPARTMENT", 20, y + 20);
+
+    doc.text("ROLE", 110, y);
+    doc.text("PAYMENT DATE", 110, y + 10);
+    doc.text("STATUS", 110, y + 20);
+
+    doc.setTextColor(dark[0], dark[1], dark[2]);
+    doc.setFont("helvetica", "normal");
+
+    doc.text(`${profile?.first_name} ${profile?.last_name}`, 60, y);
+    doc.text(`${profile?.id?.slice(0, 8).toUpperCase()}`, 60, y + 10);
+    doc.text(`${profile?.department_name || 'N/A'}`, 60, y + 20);
+
+    doc.text(`${profile?.role_title}`, 150, y);
+    doc.text(`${slip.payment_date}`, 150, y + 10);
+    doc.text("Paid", 150, y + 20);
+
+    // Earnings Section
+    y = 140;
+    doc.setTextColor(emerald[0], emerald[1], emerald[2]);
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    doc.text("EARNINGS", 20, y);
+    doc.line(20, y + 3, 190, y + 3);
+
+    y += 15;
+
+    // Table Header
+    doc.setFillColor(lightGray[0], lightGray[1], lightGray[2]);
+    doc.rect(20, y - 5, 170, 10, 'F');
+    doc.setTextColor(dark[0], dark[1], dark[2]);
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "bold");
+    doc.text("Description", 25, y + 2);
+    doc.text("Amount", 180, y + 2, { align: 'right' });
+
+    y += 15;
+
+    // Items
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(gray[0], gray[1], gray[2]);
+
+    // Base Salary
+    doc.text("Base Salary (Including Attendance Adj.)", 25, y);
+    doc.setTextColor(dark[0], dark[1], dark[2]);
+    doc.text(`Rs. ${(slip.amount - slip.bonus).toLocaleString()}`, 180, y, { align: 'right' });
+
+    y += 10;
+
+    // Bonus
+    doc.setTextColor(gray[0], gray[1], gray[2]);
+    doc.text("Task Performance Bonus", 25, y);
+    doc.setTextColor(dark[0], dark[1], dark[2]);
+    doc.text(`Rs. ${slip.bonus.toLocaleString()}`, 180, y, { align: 'right' });
+
+    y += 20;
+
+    // Total
+    doc.setDrawColor(200, 200, 200);
+    doc.line(110, y, 190, y);
+    y += 10;
+
+    doc.setFontSize(16);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(emerald[0], emerald[1], emerald[2]);
+    doc.text("NET PAY", 110, y);
+    doc.text(`Rs. ${slip.amount.toLocaleString()}`, 180, y, { align: 'right' });
+
+    // Footer
+    doc.setFontSize(8);
+    doc.setTextColor(150, 150, 150);
+    doc.setFont("helvetica", "normal");
+    doc.text("Generated by AES Industrial ERP System", 105, 280, { align: 'center' });
+    doc.text("Thank you for your hard work!", 105, 285, { align: 'center' });
+
+    doc.save(`Payslip_AES_${slip.month_year.replace(' ', '_')}.pdf`);
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
@@ -78,23 +254,22 @@ export const EmployeeDashboard = () => {
           <h2 className="text-lg font-bold tracking-tight">Employee Portal</h2>
           <p className="text-xs text-gray-400 font-medium">Welcome back, {profile?.first_name || 'User'}</p>
         </div>
-        
+
         <nav className="space-y-1 flex-1">
           {[
             { id: 'overview', label: 'Overview', icon: TrendingUp },
             { id: 'tasks', label: 'My Tasks', icon: CheckCircle },
             { id: 'profile', label: 'My Profile', icon: User },
             { id: 'attendance', label: 'Attendance', icon: Calendar },
-            { id: 'salary', label: 'Salary & Pay', icon: DollarSign },
+            { id: 'salary', label: 'Salary & Pay', icon: IndianRupee },
           ].map((tab) => (
-            <button 
+            <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${
-                activeTab === tab.id 
-                  ? 'bg-black text-white shadow-lg shadow-gray-200' 
-                  : 'text-gray-500 hover:text-black hover:bg-gray-100'
-              }`}
+              className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${activeTab === tab.id
+                ? 'bg-black text-white shadow-lg shadow-gray-200'
+                : 'text-gray-500 hover:text-black hover:bg-gray-100'
+                }`}
             >
               <tab.icon className="w-5 h-5" />
               <span>{tab.label}</span>
@@ -103,7 +278,7 @@ export const EmployeeDashboard = () => {
         </nav>
 
         <div className="pt-6 border-t border-gray-100">
-          <button 
+          <button
             onClick={() => auth.signOut()}
             className="w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-bold text-red-500 hover:bg-red-50 transition-all mb-4"
           >
@@ -129,15 +304,16 @@ export const EmployeeDashboard = () => {
               <motion.div key="overview" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
                 <div className="flex justify-between items-center mb-8">
                   <div>
-                    <h1 className="text-3xl font-bold">Good Morning, {profile?.first_name}!</h1>
+                    <h1 className="text-3xl font-bold">{getGreeting()}, {profile?.first_name}!</h1>
                     <p className="text-gray-500">Here's what's happening today at AESERP.</p>
                   </div>
                   <div className="flex space-x-3">
-                    <button 
-                      onClick={() => handleMarkAttendance('present')}
-                      className="px-6 py-3 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100"
+                    <button
+                      onClick={handleMarkAttendance}
+                      disabled={isClockingIn}
+                      className="px-6 py-3 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
                     >
-                      Clock In
+                      {isClockingIn ? <><Loader className="w-5 h-5 mr-2 animate-spin" /> Locating...</> : 'Clock In'}
                     </button>
                   </div>
                 </div>
@@ -194,7 +370,7 @@ export const EmployeeDashboard = () => {
                             <p className="font-bold text-sm">{task.title}</p>
                             <p className="text-xs text-gray-500">Deadline: {task.deadline}</p>
                           </div>
-                          <button 
+                          <button
                             onClick={() => handleUpdateTaskStatus(task.id, 'in_progress')}
                             className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-all"
                           >
@@ -218,22 +394,21 @@ export const EmployeeDashboard = () => {
                   {tasks.map((task) => (
                     <div key={task.id} className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm">
                       <div className="flex justify-between items-start mb-6">
-                        <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase ${
-                          task.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : 
+                        <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase ${task.status === 'completed' ? 'bg-emerald-100 text-emerald-700' :
                           task.status === 'in_progress' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'
-                        }`}>
+                          }`}>
                           {task.status.replace('_', ' ')}
                         </span>
                         <p className="text-xs font-bold text-gray-400">Due: {task.deadline}</p>
                       </div>
                       <h3 className="text-xl font-bold mb-3">{task.title}</h3>
                       <p className="text-gray-500 text-sm leading-relaxed mb-8">{task.description}</p>
-                      
+
                       <div className="flex space-x-3">
                         {task.status !== 'completed' && (
                           <>
                             {task.status === 'pending' && (
-                              <button 
+                              <button
                                 onClick={() => handleUpdateTaskStatus(task.id, 'in_progress')}
                                 className="flex-1 py-3 bg-black text-white text-xs font-bold rounded-xl hover:bg-gray-800 transition-all"
                               >
@@ -241,7 +416,7 @@ export const EmployeeDashboard = () => {
                               </button>
                             )}
                             {task.status === 'in_progress' && (
-                              <button 
+                              <button
                                 onClick={() => handleUpdateTaskStatus(task.id, 'completed')}
                                 className="flex-1 py-3 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 transition-all"
                               >
@@ -385,9 +560,8 @@ export const EmployeeDashboard = () => {
                         <tr key={record.id} className="hover:bg-gray-50 transition-colors">
                           <td className="px-8 py-5 text-sm font-bold text-gray-700">{record.date}</td>
                           <td className="px-8 py-5">
-                            <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase ${
-                              record.status === 'present' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
-                            }`}>
+                            <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase ${record.status === 'present' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
+                              }`}>
                               {record.status}
                             </span>
                           </td>
@@ -406,11 +580,15 @@ export const EmployeeDashboard = () => {
                 <div className="bg-black text-white p-10 rounded-[2.5rem] mb-10 flex flex-col md:flex-row justify-between items-center">
                   <div>
                     <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Current Monthly Salary</p>
-                    <h3 className="text-5xl font-black">${(profile?.salary_monthly || 0).toLocaleString()}</h3>
+                    <h3 className="text-5xl font-black">₹{(profile?.salary_monthly || 0).toLocaleString()}</h3>
                   </div>
-                  <div className="mt-8 md:mt-0 text-center md:text-right">
-                    <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Next Payout Date</p>
-                    <p className="text-2xl font-bold">March 31, 2024</p>
+                  <div className="mt-8 md:mt-0 text-left md:text-right">
+                    <div className="mb-4">
+                      <p className="text-xs font-bold text-emerald-400 uppercase tracking-widest mb-1">Est. Task Bonus</p>
+                      <p className="text-2xl font-bold">+₹{(completedTasksCount * (profile?.task_bonus_rate || 50)).toLocaleString()}</p>
+                    </div>
+                    <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-1">Next Payout</p>
+                    <p className="text-lg font-bold">March 31, 2024</p>
                   </div>
                 </div>
 
@@ -423,24 +601,33 @@ export const EmployeeDashboard = () => {
                         <th className="px-8 py-5 text-xs font-bold text-gray-400 uppercase tracking-widest">Amount</th>
                         <th className="px-8 py-5 text-xs font-bold text-gray-400 uppercase tracking-widest">Bonus</th>
                         <th className="px-8 py-5 text-xs font-bold text-gray-400 uppercase tracking-widest">Status</th>
+                        <th className="px-8 py-5 text-xs font-bold text-gray-400 uppercase tracking-widest text-right">Payslip</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {salaryHistory.map((sal) => (
                         <tr key={sal.id} className="hover:bg-gray-50 transition-colors">
                           <td className="px-8 py-5 text-sm font-bold text-gray-700">{sal.month_year}</td>
-                          <td className="px-8 py-5 text-sm font-bold text-gray-900">${sal.amount.toLocaleString()}</td>
-                          <td className="px-8 py-5 text-sm font-bold text-emerald-600">+${sal.bonus.toLocaleString()}</td>
+                          <td className="px-8 py-5 text-sm font-bold text-gray-900">₹{sal.amount.toLocaleString()}</td>
+                          <td className="px-8 py-5 text-sm font-bold text-emerald-600">+₹{sal.bonus.toLocaleString()}</td>
                           <td className="px-8 py-5">
                             <span className="px-3 py-1 bg-emerald-100 text-emerald-700 text-[10px] font-bold rounded-full uppercase">
                               Paid
                             </span>
                           </td>
+                          <td className="px-8 py-5 text-right">
+                            <button
+                              onClick={() => handleDownloadSlip(sal)}
+                              className="inline-flex items-center justify-center p-2 text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-all"
+                            >
+                              <Download className="w-4 h-4" />
+                            </button>
+                          </td>
                         </tr>
                       ))}
                       {salaryHistory.length === 0 && (
                         <tr>
-                          <td colSpan={4} className="px-8 py-10 text-center text-gray-400 text-sm italic">
+                          <td colSpan={5} className="px-8 py-10 text-center text-gray-400 text-sm italic">
                             No payment history available yet.
                           </td>
                         </tr>

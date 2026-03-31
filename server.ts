@@ -22,6 +22,21 @@ const db = new Database(dbPath);
 const schema = fs.readFileSync(schemaPath, "utf8");
 db.exec(schema);
 
+// Helper: Haversine Formula for Distance Calculation (in meters)
+function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
+  const R = 6371e3; // Earth radius in meters
+  const φ1 = lat1 * Math.PI / 180;
+  const φ2 = lat2 * Math.PI / 180;
+  const Δφ = (lat2 - lat1) * Math.PI / 180;
+  const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+  const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+    Math.cos(φ1) * Math.cos(φ2) *
+    Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
 async function startServer() {
   try {
     const app = express();
@@ -33,7 +48,7 @@ async function startServer() {
 
     // Auth/User Sync
     app.post("/api/users/sync", (req, res) => {
-      const { id, email, displayName, role } = req.body;
+      const { id, email, displayName, role, phone, address } = req.body;
       try {
         // Check if user exists
         const existing = db.prepare("SELECT * FROM users WHERE id = ?").get(id) as any;
@@ -44,15 +59,38 @@ async function startServer() {
           );
           stmt.run(id, email, displayName, role || 'employee');
 
-          // If employee, create employee record
+          // If employee, create employee record with all details
           if ((role || 'employee') === 'employee') {
-            db.prepare("INSERT INTO employees (id, first_name, last_name, email) VALUES (?, ?, ?, ?)")
-              .run(id, displayName.split(' ')[0], displayName.split(' ')[1] || '', email);
+            const nameParts = displayName ? displayName.split(' ') : [''];
+            const firstName = nameParts[0];
+            const lastName = nameParts.slice(1).join(' ');
+            db.prepare("INSERT INTO employees (id, first_name, last_name, email, phone, address) VALUES (?, ?, ?, ?, ?, ?)")
+              .run(id, firstName, lastName, email, phone, address);
           }
-        } else if (role && existing.role === 'employee' && role === 'admin') {
-          // Handle race condition: if user was created as employee by AuthContext sync 
-          // but AuthPage signup says they should be admin, update it.
-          db.prepare("UPDATE users SET role = ? WHERE id = ?").run(role, id);
+        } else {
+          // User exists, check for updates
+          if (role && existing.role !== role) {
+            db.prepare("UPDATE users SET role = ? WHERE id = ?").run(role, id);
+          }
+          // Update employee details if provided
+          if (phone || address) {
+            const employeeExists = db.prepare("SELECT id FROM employees WHERE id = ?").get(id);
+            if (employeeExists) {
+              let updateQuery = "UPDATE employees SET ";
+              const params = [];
+              if (phone) {
+                updateQuery += "phone = ?";
+                params.push(phone);
+              }
+              if (address) {
+                updateQuery += (phone ? ", " : "") + "address = ?";
+                params.push(address);
+              }
+              updateQuery += " WHERE id = ?";
+              params.push(id);
+              db.prepare(updateQuery).run(...params);
+            }
+          }
         }
 
         const user = db.prepare("SELECT * FROM users WHERE id = ?").get(id);
@@ -85,15 +123,65 @@ async function startServer() {
     });
 
     app.put("/api/employees/:id", (req, res) => {
-      const { first_name, last_name, phone, address, department_id, role_title, salary_monthly, status } = req.body;
+      const body = req.body ?? {};
+      const {
+        first_name,
+        last_name,
+        department_id,
+        role_title,
+        salary_monthly = 0,
+        task_bonus_rate = 50,
+        status,
+        role
+      } = body;
+
+      // Sanitize inputs: better-sqlite3 throws on 'undefined' or 'NaN'. Convert to 'null' or safe fallbacks.
+      const sanitizedFirstName = first_name || '';
+      const sanitizedLastName = last_name || '';
+      const deptIdNumber = Number(department_id);
+      const sanitizedDeptId = (department_id === '' || department_id === null || department_id === undefined || !Number.isFinite(deptIdNumber)) ? null : deptIdNumber;
+      const sanitizedRoleTitle = role_title || null;
+      const sanitizedSalary = isNaN(parseFloat(salary_monthly)) ? 0 : parseFloat(salary_monthly);
+      const sanitizedBonus = isNaN(parseFloat(task_bonus_rate)) ? 50 : parseFloat(task_bonus_rate);
+      const sanitizedStatus = status || 'active';
+      const sanitizedRole = role || 'employee';
+
       try {
-        db.prepare(`
-        UPDATE employees 
-        SET first_name = ?, last_name = ?, phone = ?, address = ?, 
-            department_id = ?, role_title = ?, salary_monthly = ?, status = ?
-        WHERE id = ?
-      `).run(first_name, last_name, phone, address, department_id, role_title, salary_monthly, status, req.params.id);
-        res.json({ success: true });
+        const employeeExists = db.prepare("SELECT id FROM employees WHERE id = ?").get(req.params.id);
+        if (!employeeExists) {
+          res.status(404).json({ error: "Employee not found" });
+          return;
+        }
+
+        const transaction = db.transaction(() => {
+          const updateResult = db.prepare(`
+          UPDATE employees 
+          SET first_name = ?, last_name = ?, 
+              department_id = ?, role_title = ?, salary_monthly = ?, task_bonus_rate = ?, status = ?
+          WHERE id = ?
+        `).run(sanitizedFirstName, sanitizedLastName, sanitizedDeptId, sanitizedRoleTitle, sanitizedSalary, sanitizedBonus, sanitizedStatus, req.params.id);
+
+          if (updateResult.changes === 0) {
+            throw new Error("Employee update failed");
+          }
+
+          if (sanitizedRole) {
+            db.prepare(`
+            UPDATE users
+            SET role = ?
+            WHERE id = ?
+          `).run(sanitizedRole, req.params.id);
+          }
+        });
+        transaction();
+        const employee = db.prepare(`
+      SELECT e.*, d.name as department_name, u.role
+      FROM employees e 
+      JOIN users u ON e.id = u.id
+      LEFT JOIN departments d ON e.department_id = d.id
+      WHERE e.id = ?
+    `).get(req.params.id);
+        res.json(employee);
       } catch (error) {
         res.status(500).json({ error: (error as Error).message });
       }
@@ -179,10 +267,77 @@ async function startServer() {
       }
     });
 
+    // Geo-Fence Settings Management
+    app.get("/api/settings/geo", (req, res) => {
+      const settings = db.prepare("SELECT * FROM workplace_settings LIMIT 1").get();
+      res.json(settings);
+    });
+
+    app.put("/api/settings/geo", (req, res) => {
+      const { lat, lng, radius } = req.body;
+      try {
+        db.prepare("UPDATE workplace_settings SET lat = ?, lng = ?, allowed_radius_meters = ? WHERE id = 1")
+          .run(lat, lng, radius);
+        res.json({ success: true });
+      } catch (error) {
+        res.status(500).json({ error: (error as Error).message });
+      }
+    });
+
+    // Geo-Fenced Attendance
+    app.post("/api/attendance/geo", (req, res) => {
+      const { employee_id, lat, lng } = req.body;
+
+      try {
+        const settings = db.prepare("SELECT * FROM workplace_settings LIMIT 1").get() as any;
+        if (!settings) {
+          throw new Error("Workplace settings not configured in database.");
+        }
+
+        const distance = calculateDistance(lat, lng, settings.lat, settings.lng);
+        const isInside = distance <= settings.allowed_radius_meters;
+        // Log attempt
+        db.prepare("INSERT INTO attendance_logs (employee_id, lat, lng, distance, status) VALUES (?, ?, ?, ?, ?)")
+          .run(employee_id, lat, lng, distance, isInside ? 'Present' : 'Rejected');
+
+        if (isInside) {
+          // Check if already marked
+          const date = new Date().toISOString().split('T')[0];
+          try {
+            db.prepare("INSERT INTO attendance (employee_id, status, date) VALUES (?, 'present', ?)")
+              .run(employee_id, date);
+            res.json({ success: true, message: "Attendance marked successfully!", distance });
+          } catch (e) {
+            // Likely unique constraint violation
+            res.json({ success: true, message: "Attendance already marked for today.", distance });
+          }
+        } else {
+          res.status(403).json({
+            success: false,
+            error: "You are not within workplace boundary.",
+            distance: Math.round(distance)
+          });
+        }
+      } catch (error) {
+        res.status(500).json({ error: (error as Error).message });
+      }
+    });
+
     // Salary
     app.get("/api/salary/:employeeId", (req, res) => {
       const history = db.prepare("SELECT * FROM salary_history WHERE employee_id = ? ORDER BY payment_date DESC").all(req.params.employeeId);
       res.json(history);
+    });
+
+    app.post("/api/salary", (req, res) => {
+      const { employee_id, amount, bonus, payment_date, month_year } = req.body;
+      try {
+        db.prepare("INSERT INTO salary_history (employee_id, amount, bonus, payment_date, month_year) VALUES (?, ?, ?, ?, ?)")
+          .run(employee_id, amount, bonus, payment_date, month_year);
+        res.json({ success: true });
+      } catch (error) {
+        res.status(500).json({ error: (error as Error).message });
+      }
     });
 
     // Inquiries
@@ -245,6 +400,37 @@ async function startServer() {
       FROM machines m
     `).all();
       res.json(machines);
+    });
+
+    app.post("/api/machines", (req, res) => {
+      const { name, model_number, description, specifications, price, stock_quantity } = req.body;
+      try {
+        const result = db.prepare(`
+          INSERT INTO machines (name, model_number, description, specifications, price, stock_quantity)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).run(name, model_number, description, specifications, price, stock_quantity);
+        res.json({ id: result.lastInsertRowid });
+      } catch (error) {
+        res.status(500).json({ error: (error as Error).message });
+      }
+    });
+
+    app.put("/api/machines/:id", (req, res) => {
+      const { name, model_number, description, specifications, price, stock_quantity } = req.body;
+      try {
+        db.prepare(`
+          UPDATE machines SET name = ?, model_number = ?, description = ?, specifications = ?, price = ?, stock_quantity = ?
+          WHERE id = ?
+        `).run(name, model_number, description, specifications, price, stock_quantity, req.params.id);
+        res.json({ success: true });
+      } catch (error) {
+        res.status(500).json({ error: (error as Error).message });
+      }
+    });
+
+    app.delete("/api/machines/:id", (req, res) => {
+      db.prepare("DELETE FROM machines WHERE id = ?").run(req.params.id);
+      res.json({ success: true });
     });
 
     // Dashboard Stats

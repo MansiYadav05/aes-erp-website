@@ -81,7 +81,7 @@ export const Products = () => {
                           <h3 className="text-3xl font-bold group-hover:text-emerald-600 transition-colors">{machine.name}</h3>
                         </div>
                         <div className="text-right">
-                          <p className="text-2xl font-bold text-black">${machine.price.toLocaleString()}</p>
+                          <p className="text-2xl font-bold text-black">₹{machine.price.toLocaleString()}</p>
                           <p className="text-xs text-gray-400">Unit Price (Excl. Tax)</p>
                         </div>
                       </div>

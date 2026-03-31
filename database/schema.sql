@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS employees (
     department_id INTEGER,
     role_title TEXT,
     salary_monthly REAL DEFAULT 0,
+    task_bonus_rate REAL DEFAULT 50.0,
     hire_date DATE DEFAULT CURRENT_DATE,
     status TEXT DEFAULT 'active',
     FOREIGN KEY (id) REFERENCES users (id),
@@ -130,8 +131,8 @@ CREATE TABLE IF NOT EXISTS order_items (
 );
 
 -- Seed data for Departments
-INSERT OR IGNORE INTO
-    departments (name, description)
+INSERT
+    OR IGNORE INTO departments (name, description)
 VALUES (
         'Production',
         'Manufacturing and assembly of machinery'
@@ -154,13 +155,15 @@ VALUES (
     );
 
 -- Seed data for Machines
-INSERT OR IGNORE INTO machines (
+INSERT
+    OR IGNORE INTO machines (
         name,
         model_number,
         description,
         specifications,
         price,
-        stock_quantity)
+        stock_quantity
+    )
 VALUES (
         'Hydraulic Press X1',
         'HP-X1-2024',
@@ -195,8 +198,8 @@ VALUES (
     );
 
 -- Seed data for Users (Customers)
-INSERT OR IGNORE INTO
-    users (id, email, display_name, role)
+INSERT
+    OR IGNORE INTO users (id, email, display_name, role)
 VALUES (
         'cust_1',
         'procurement@tesla.com',
@@ -217,8 +220,8 @@ VALUES (
     );
 
 -- Seed data for Orders (to show 'Sold To')
-INSERT OR IGNORE INTO
-    orders (
+INSERT
+    OR IGNORE INTO orders (
         id,
         user_id,
         status,
@@ -248,8 +251,8 @@ VALUES (
     );
 
 -- Seed data for Order Items
-INSERT OR IGNORE INTO
-    order_items (
+INSERT
+    OR IGNORE INTO order_items (
         order_id,
         machine_id,
         quantity,
@@ -258,3 +261,31 @@ INSERT OR IGNORE INTO
 VALUES (1, 1, 1, 45000.00),
     (2, 2, 1, 85000.00),
     (3, 3, 1, 32000.00);
+
+-- ---------------------------------------------------------
+-- Geo-Fencing Attendance System Tables
+-- ---------------------------------------------------------
+
+-- Workplace Settings (Coordinates & Radius)
+CREATE TABLE IF NOT EXISTS workplace_settings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    lat REAL DEFAULT 18.7086, -- Default: Talawade, Pune
+    lng REAL DEFAULT 73.8053,
+    allowed_radius_meters REAL DEFAULT 100.0
+);
+
+-- Seed Default Settings if not exists
+INSERT OR IGNORE INTO workplace_settings (id, lat, lng, allowed_radius_meters) 
+VALUES (1, 18.7086, 73.8053, 100.0); -- CHANGE HERE: Replace with your Factory's Latitude and Longitude
+
+-- Attendance Logs (All attempts)
+CREATE TABLE IF NOT EXISTS attendance_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    employee_id TEXT,
+    lat REAL,
+    lng REAL,
+    distance REAL,
+    status TEXT, -- 'Present' or 'Rejected'
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (employee_id) REFERENCES employees (id)
+);
