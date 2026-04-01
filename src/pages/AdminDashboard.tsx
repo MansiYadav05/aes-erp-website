@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import {
   Users, BarChart3, Plus, Trash2, Edit2, MessageSquare,
   Layout, CheckCircle, Clock, Bell, Send, Briefcase,
-  Settings, Globe, Info, Package, Phone, Mail, MapPin, IndianRupee, RefreshCw,
-  Calendar, Cpu, Shield, ArrowRight, X, ExternalLink
+  Settings, Globe, Info, Package, Phone, Mail, MapPin, IndianRupee, RefreshCw, Search,
+  Calendar, Cpu, Shield, ArrowRight, X, ExternalLink, FileText
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { auth } from '../firebase';
@@ -73,15 +73,6 @@ const CMS_EDITOR_HELPERS: Record<string, { note: string, template: any }> = {
         description: "Have questions about our machinery or need a technical consultation? Fill out the form below to get in touch."
       }
     }
-  },
-  products: {
-    note: 'This page currently loads product data from the machines API, not CMS. Saving here will not change the live products page until it is connected to CMS.',
-    template: {
-      hero: {
-        title: "Our Products",
-        description: "Update the products page introduction here."
-      }
-    }
   }
 };
 
@@ -92,6 +83,7 @@ export const AdminDashboard = () => {
   const [inquiries, setInquiries] = useState<any[]>([]);
   const [tasks, setTasks] = useState<any[]>([]);
   const [machines, setMachines] = useState<any[]>([]);
+  const [subscribers, setSubscribers] = useState<any[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
   const [geoSettings, setGeoSettings] = useState({ lat: 0, lng: 0, allowed_radius_meters: 100 });
   const [loading, setLoading] = useState(true);
@@ -114,13 +106,15 @@ export const AdminDashboard = () => {
   const [contentError, setContentError] = useState('');
   const [notificationForm, setNotificationForm] = useState({ user_id: '', title: '', message: '' });
   const [taskForm, setTaskForm] = useState({ title: '', description: '', assigned_to: '', deadline: '' });
-  const [machineForm, setMachineForm] = useState({ name: '', model_number: '', description: '', price: 0, stock_quantity: 0, specifications: '{}' });
+  const [machineForm, setMachineForm] = useState({ name: '', model_number: '', description: '', price: 0, specifications: '{}' });
+  const [newsletterForm, setNewsletterForm] = useState({ subject: '', message: '' });
 
   // Payroll state
   const [showPayrollModal, setShowPayrollModal] = useState(false);
   const [payrollEmployee, setPayrollEmployee] = useState<any>(null);
   const [payrollData, setPayrollData] = useState({ working_days: 30, present_days: 30, task_bonus_rate: 50 });
   const [selectedDepartment, setSelectedDepartment] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
   const contentHelper = editingContent
     ? (CMS_EDITOR_HELPERS[editingContent.id] || {
       note: 'Edit the values carefully and keep the same field names.',
@@ -135,23 +129,35 @@ export const AdminDashboard = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [statsRes, empRes, inqRes, taskRes, deptRes, settingsRes, machinesRes] = await Promise.all([
+      const responses = await Promise.all([
         fetch('/api/stats'),
         fetch('/api/employees'),
         fetch('/api/inquiries'),
         fetch('/api/tasks'),
         fetch('/api/departments'),
         fetch('/api/settings/geo'),
-        fetch('/api/machines')
+        fetch('/api/machines'),
+        fetch('/api/newsletter/subscribers')
       ]);
 
-      setStats(await statsRes.json());
-      setEmployees(await empRes.json());
-      setInquiries(await inqRes.json());
-      setTasks(await taskRes.json());
-      setDepartments(await deptRes.json());
-      setGeoSettings(await settingsRes.json());
-      setMachines(await machinesRes.json());
+      // Map through responses and only parse JSON if content-type is correct and status is OK
+      const data = await Promise.all(responses.map(async (res) => {
+        if (!res.ok) return null;
+        const contentType = res.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+          return res.json();
+        }
+        return null;
+      }));
+
+      if (data[0]) setStats(data[0]);
+      if (data[1]) setEmployees(data[1]);
+      if (data[2]) setInquiries(data[2]);
+      if (data[3]) setTasks(data[3]);
+      if (data[4]) setDepartments(data[4]);
+      if (data[5]) setGeoSettings(data[5]);
+      if (data[6]) setMachines(data[6]);
+      if (data[7]) setSubscribers(data[7]);
     } catch (error) {
       console.error('Error fetching admin data:', error);
     } finally {
@@ -258,19 +264,21 @@ export const AdminDashboard = () => {
 
   const handleUpdateEmployee = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!editingEmployee || !editingEmployee.id) return;
+
     try {
       const id = editingEmployee.id;
-
-      // Create a clean payload to avoid sending read-only joined fields (like department_name)
       const payload = {
-        first_name: editingEmployee.first_name,
-        last_name: editingEmployee.last_name,
-        role_title: editingEmployee.role_title,
-        department_id: editingEmployee.department_id ? parseInt(editingEmployee.department_id.toString()) : null,
-        salary_monthly: parseFloat(editingEmployee.salary_monthly) || 0,
-        task_bonus_rate: parseFloat(editingEmployee.task_bonus_rate) || 0,
-        status: editingEmployee.status,
-        role: editingEmployee.role
+        first_name: editingEmployee.first_name || '',
+        last_name: editingEmployee.last_name || '',
+        role_title: editingEmployee.role_title || '',
+        department_id: (editingEmployee.department_id === '' || editingEmployee.department_id === null || editingEmployee.department_id === undefined)
+          ? null
+          : parseInt(String(editingEmployee.department_id)),
+        salary_monthly: parseFloat(String(editingEmployee.salary_monthly ?? 0)),
+        task_bonus_rate: parseFloat(String(editingEmployee.task_bonus_rate ?? 50)),
+        status: editingEmployee.status || 'active',
+        role: editingEmployee.role || 'employee'
       };
 
       const response = await fetch(`/api/employees/${id}`, {
@@ -279,7 +287,11 @@ export const AdminDashboard = () => {
         body: JSON.stringify(payload)
       });
 
-      if (!response.ok) throw new Error('Update failed');
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Server error:", errorText);
+        throw new Error('Update failed');
+      }
 
       setEditingEmployee(null);
       setShowEmployeeModal(false);
@@ -288,6 +300,84 @@ export const AdminDashboard = () => {
     } catch (error) {
       console.error('Error updating employee:', error);
       setToast({ message: 'Failed to update employee data.', type: 'error' });
+    }
+  };
+
+  const handleDeleteEmployee = async (id: string) => {
+    if (confirm('Are you sure you want to delete this employee? This will remove their profile and access to the portal.')) {
+      try {
+        const response = await fetch(`/api/employees/${id}`, {
+          method: 'DELETE'
+        });
+        if (!response.ok) throw new Error('Failed to delete employee');
+
+        setToast({ message: 'Employee deleted successfully!', type: 'success' });
+        fetchData();
+      } catch (error) {
+        console.error('Error deleting employee:', error);
+        setToast({ message: 'Failed to delete employee.', type: 'error' });
+      }
+    }
+  };
+
+  const handleExportAttendance = async () => {
+    try {
+      const response = await fetch('/api/attendance');
+      if (!response.ok) throw new Error('Failed to fetch attendance');
+
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        throw new Error("Server returned HTML instead of JSON. Please ensure the server has been restarted.");
+      }
+
+      const data = await response.json();
+
+      if (data.length === 0) {
+        setToast({ message: 'No attendance records found to export.', type: 'error' });
+        return;
+      }
+
+      const headers = ['Date', 'Employee ID', 'Employee Name', 'Status'];
+      const csvRows = [
+        headers.join(','),
+        ...data.map((rec: any) => [
+          rec.date,
+          rec.employee_id,
+          `"${rec.employee_name}"`,
+          rec.status
+        ].join(','))
+      ];
+
+      const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `attendance_report_${new Date().toISOString().split('T')[0]}.csv`;
+      link.click();
+      setToast({ message: 'Attendance report downloaded!', type: 'success' });
+    } catch (error) {
+      console.error('Export error:', error);
+      setToast({ message: 'Failed to export attendance.', type: 'error' });
+    }
+  };
+
+  const handleSendNewsletter = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const response = await fetch('/api/newsletter/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newsletterForm)
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to send broadcast');
+      }
+
+      setNewsletterForm({ subject: '', message: '' });
+      setToast({ message: 'Newsletter broadcasted successfully!', type: 'success' });
+    } catch (error) {
+      setToast({ message: error instanceof Error ? error.message : 'Failed to send newsletter.', type: 'error' });
     }
   };
 
@@ -307,7 +397,7 @@ export const AdminDashboard = () => {
 
       setShowMachineModal(false);
       setEditingMachine(null);
-      setMachineForm({ name: '', model_number: '', description: '', price: 0, stock_quantity: 0, specifications: '{}' });
+      setMachineForm({ name: '', model_number: '', description: '', price: 0, specifications: '{}' });
       setToast({ message: `Machine ${editingMachine ? 'updated' : 'added'} successfully!`, type: 'success' });
       fetchData();
     } catch (error) {
@@ -396,6 +486,7 @@ export const AdminDashboard = () => {
             { id: 'tasks', label: 'Tasks', icon: CheckCircle },
             { id: 'inquiries', label: 'Enquiries', icon: MessageSquare },
             { id: 'content', label: 'CMS', icon: Globe },
+            { id: 'newsletter', label: 'Newsletter', icon: Mail },
             { id: 'notifications', label: 'Broadcast', icon: Bell },
             { id: 'settings', label: 'Settings', icon: Settings },
           ].map((tab) => (
@@ -510,16 +601,35 @@ export const AdminDashboard = () => {
                 <motion.div key="employees" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
                   <div className="flex justify-between items-center mb-8">
                     <h1 className="text-3xl font-bold">Employee Management</h1>
-                    <select
-                      value={selectedDepartment}
-                      onChange={(e) => setSelectedDepartment(e.target.value)}
-                      className="px-4 py-2 bg-white border border-gray-200 rounded-xl focus:outline-none focus:border-black transition-all text-sm"
-                    >
-                      <option value="">All Departments</option>
-                      {departments.map(d => (
-                        <option key={d.id} value={d.id}>{d.name}</option>
-                      ))}
-                    </select>
+                    <div className="flex items-center space-x-3">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <input
+                          type="text"
+                          placeholder="Search staff..."
+                          value={searchTerm}
+                          onChange={(e) => setSearchTerm(e.target.value)}
+                          className="pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-xl focus:outline-none focus:border-black transition-all text-sm w-48 md:w-64"
+                        />
+                      </div>
+                      <button
+                        onClick={handleExportAttendance}
+                        className="flex items-center space-x-2 px-4 py-2 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-xl text-sm font-bold hover:bg-emerald-100 transition-all"
+                      >
+                        <FileText className="w-4 h-4" />
+                        <span>Export Attendance</span>
+                      </button>
+                      <select
+                        value={selectedDepartment}
+                        onChange={(e) => setSelectedDepartment(e.target.value)}
+                        className="px-4 py-2 bg-white border border-gray-200 rounded-xl focus:outline-none focus:border-black transition-all text-sm"
+                      >
+                        <option value="">All Departments</option>
+                        {departments.map(d => (
+                          <option key={d.id} value={d.id}>{d.name}</option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
 
                   <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
@@ -534,7 +644,12 @@ export const AdminDashboard = () => {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
-                        {employees.filter(emp => !selectedDepartment || emp.department_id == selectedDepartment).map((emp) => (
+                        {employees.filter(emp => {
+                          const matchesDept = !selectedDepartment || emp.department_id == selectedDepartment;
+                          const fullName = `${emp.first_name} ${emp.last_name}`.toLowerCase();
+                          const matchesSearch = fullName.includes(searchTerm.toLowerCase());
+                          return matchesDept && matchesSearch;
+                        }).map((emp) => (
                           <tr key={emp.id} className="hover:bg-gray-50 transition-colors">
                             <td className="px-8 py-5">
                               <div className="flex items-center space-x-4">
@@ -574,6 +689,13 @@ export const AdminDashboard = () => {
                                   title="Calculate Payroll"
                                 >
                                   <IndianRupee className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteEmployee(emp.id)}
+                                  className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                                  title="Delete Employee"
+                                >
+                                  <Trash2 className="w-4 h-4" />
                                 </button>
                               </div>
                             </td>
@@ -826,7 +948,7 @@ export const AdminDashboard = () => {
                         <button
                           onClick={() => {
                             setEditingMachine(null);
-                            setMachineForm({ name: '', model_number: '', description: '', price: 0, stock_quantity: 0, specifications: '{}' });
+                            setMachineForm({ name: '', model_number: '', description: '', price: 0, specifications: '{}' });
                             setShowMachineModal(true);
                           }}
                           className="p-2 bg-black text-white rounded-xl hover:bg-gray-800 transition-all"
@@ -915,11 +1037,75 @@ export const AdminDashboard = () => {
                 </motion.div>
               )}
 
+              {activeTab === 'newsletter' && (
+                <motion.div key="newsletter" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+                  <h1 className="text-3xl font-bold mb-8">Newsletter Management</h1>
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    <div className="lg:col-span-1">
+                      <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm">
+                        <h3 className="text-xl font-bold mb-6">Compose Broadcast</h3>
+                        <form onSubmit={handleSendNewsletter} className="space-y-5">
+                          <div>
+                            <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Subject</label>
+                            <input
+                              required
+                              type="text"
+                              value={newsletterForm.subject}
+                              onChange={(e) => setNewsletterForm({ ...newsletterForm, subject: e.target.value })}
+                              className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:border-black transition-all"
+                              placeholder="e.g., Monthly Product Updates"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Message Body</label>
+                            <textarea
+                              required
+                              rows={6}
+                              value={newsletterForm.message}
+                              onChange={(e) => setNewsletterForm({ ...newsletterForm, message: e.target.value })}
+                              className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:border-black transition-all resize-none"
+                              placeholder="Enter newsletter content..."
+                            />
+                          </div>
+                          <button type="submit" className="w-full py-4 bg-black text-white font-bold rounded-xl hover:bg-gray-800 transition-all flex items-center justify-center">
+                            Send to {subscribers.length} Subscribers <Send className="ml-2 w-4 h-4" />
+                          </button>
+                        </form>
+                      </div>
+                    </div>
+
+                    <div className="lg:col-span-2">
+                      <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
+                        <table className="w-full text-left">
+                          <thead className="bg-gray-50 border-b border-gray-100">
+                            <tr>
+                              <th className="px-8 py-5 text-xs font-bold text-gray-400 uppercase tracking-widest">Email Address</th>
+                              <th className="px-8 py-5 text-xs font-bold text-gray-400 uppercase tracking-widest">Subscribed On</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {subscribers.map((sub) => (
+                              <tr key={sub.id} className="hover:bg-gray-50 transition-colors">
+                                <td className="px-8 py-5 text-sm font-bold text-gray-700">{sub.email}</td>
+                                <td className="px-8 py-5 text-sm text-gray-400">{new Date(sub.subscribed_at).toLocaleDateString()}</td>
+                              </tr>
+                            ))}
+                            {subscribers.length === 0 && (
+                              <tr><td colSpan={2} className="px-8 py-10 text-center text-gray-400 italic">No subscribers yet.</td></tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
               {activeTab === 'content' && (
                 <motion.div key="content" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
                   <h1 className="text-3xl font-bold mb-8">Website Content Management</h1>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {['Home', 'About', 'Products', 'Services', 'Contact'].map((page) => (
+                    {['Home', 'About', 'Services', 'Contact'].map((page) => (
                       <div key={page} className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm flex flex-col items-center text-center">
                         <div className="w-14 h-14 bg-gray-50 rounded-2xl flex items-center justify-center mb-6">
                           <Layout className="text-gray-400 w-7 h-7" />
@@ -1076,15 +1262,9 @@ export const AdminDashboard = () => {
                 <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 ml-1">Description</label>
                 <textarea rows={2} value={machineForm.description || ''} onChange={e => setMachineForm({ ...machineForm, description: e.target.value })} className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:border-black resize-none" />
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 ml-1">Price (₹)</label>
-                  <input type="number" value={machineForm.price} onChange={e => setMachineForm({ ...machineForm, price: parseFloat(e.target.value) })} className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:border-black" />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 ml-1">Stock Quantity</label>
-                  <input type="number" value={machineForm.stock_quantity} onChange={e => setMachineForm({ ...machineForm, stock_quantity: parseInt(e.target.value) })} className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:border-black" />
-                </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 ml-1">Price (₹)</label>
+                <input type="number" value={machineForm.price} onChange={e => setMachineForm({ ...machineForm, price: parseFloat(e.target.value) })} className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:border-black" />
               </div>
               <div>
                 <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 ml-1">Specifications (JSON)</label>

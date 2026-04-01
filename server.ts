@@ -22,6 +22,17 @@ const db = new Database(dbPath);
 const schema = fs.readFileSync(schemaPath, "utf8");
 db.exec(schema);
 
+// Migration: Ensure columns added in newer schema versions exist in the database
+const tableInfo = db.prepare("PRAGMA table_info(employees)").all() as { name: string }[];
+const columnNames = tableInfo.map(c => c.name);
+
+if (!columnNames.includes('salary_monthly')) {
+  db.prepare("ALTER TABLE employees ADD COLUMN salary_monthly REAL DEFAULT 0").run();
+}
+if (!columnNames.includes('task_bonus_rate')) {
+  db.prepare("ALTER TABLE employees ADD COLUMN task_bonus_rate REAL DEFAULT 50.0").run();
+}
+
 // Helper: Haversine Formula for Distance Calculation (in meters)
 function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
   const R = 6371e3; // Earth radius in meters
@@ -129,41 +140,32 @@ async function startServer() {
         last_name,
         department_id,
         role_title,
-        salary_monthly = 0,
-        task_bonus_rate = 50,
+        salary_monthly,
+        task_bonus_rate,
         status,
         role
       } = body;
 
-      // Sanitize inputs: better-sqlite3 throws on 'undefined' or 'NaN'. Convert to 'null' or safe fallbacks.
       const sanitizedFirstName = first_name || '';
       const sanitizedLastName = last_name || '';
       const deptIdNumber = Number(department_id);
-      const sanitizedDeptId = (department_id === '' || department_id === null || department_id === undefined || !Number.isFinite(deptIdNumber)) ? null : deptIdNumber;
+      const sanitizedDeptId = (department_id === '' || department_id === null || department_id === undefined || isNaN(deptIdNumber)) ? null : deptIdNumber;
       const sanitizedRoleTitle = role_title || null;
-      const sanitizedSalary = isNaN(parseFloat(salary_monthly)) ? 0 : parseFloat(salary_monthly);
-      const sanitizedBonus = isNaN(parseFloat(task_bonus_rate)) ? 50 : parseFloat(task_bonus_rate);
+      const sanitizedSalary = isNaN(parseFloat(String(salary_monthly))) ? 0 : parseFloat(String(salary_monthly));
+      const sanitizedBonus = isNaN(parseFloat(String(task_bonus_rate))) ? 50 : parseFloat(String(task_bonus_rate));
       const sanitizedStatus = status || 'active';
       const sanitizedRole = role || 'employee';
 
       try {
-        const employeeExists = db.prepare("SELECT id FROM employees WHERE id = ?").get(req.params.id);
-        if (!employeeExists) {
-          res.status(404).json({ error: "Employee not found" });
-          return;
-        }
-
         const transaction = db.transaction(() => {
-          const updateResult = db.prepare(`
+          // Perform the update. We don't throw if changes === 0 because if the user 
+          // saves without changing any data, SQLite might report 0 rows modified.
+          db.prepare(`
           UPDATE employees 
           SET first_name = ?, last_name = ?, 
               department_id = ?, role_title = ?, salary_monthly = ?, task_bonus_rate = ?, status = ?
           WHERE id = ?
         `).run(sanitizedFirstName, sanitizedLastName, sanitizedDeptId, sanitizedRoleTitle, sanitizedSalary, sanitizedBonus, sanitizedStatus, req.params.id);
-
-          if (updateResult.changes === 0) {
-            throw new Error("Employee update failed");
-          }
 
           if (sanitizedRole) {
             db.prepare(`
@@ -182,6 +184,23 @@ async function startServer() {
       WHERE e.id = ?
     `).get(req.params.id);
         res.json(employee);
+      } catch (error) {
+        res.status(500).json({ error: (error as Error).message });
+      }
+    });
+
+    app.delete("/api/employees/:id", (req, res) => {
+      try {
+        const transaction = db.transaction(() => {
+          // Delete related records to maintain database integrity
+          db.prepare("DELETE FROM attendance WHERE employee_id = ?").run(req.params.id);
+          db.prepare("DELETE FROM salary_history WHERE employee_id = ?").run(req.params.id);
+          db.prepare("DELETE FROM tasks WHERE assigned_to = ?").run(req.params.id);
+          db.prepare("DELETE FROM employees WHERE id = ?").run(req.params.id);
+          db.prepare("DELETE FROM users WHERE id = ?").run(req.params.id);
+        });
+        transaction();
+        res.json({ success: true });
       } catch (error) {
         res.status(500).json({ error: (error as Error).message });
       }
@@ -251,6 +270,21 @@ async function startServer() {
     });
 
     // Attendance
+    app.get("/api/attendance", (_req, res) => {
+      try {
+        const query = `
+          SELECT a.*, (e.first_name || ' ' || e.last_name) as employee_name 
+          FROM attendance a
+          JOIN employees e ON a.employee_id = e.id
+          ORDER BY a.date DESC
+        `;
+        const records = db.prepare(query).all();
+        res.json(records);
+      } catch (error) {
+        res.status(500).json({ error: (error as Error).message });
+      }
+    });
+
     app.get("/api/attendance/:employeeId", (req, res) => {
       const records = db.prepare("SELECT * FROM attendance WHERE employee_id = ?").all(req.params.employeeId);
       res.json(records);
@@ -458,6 +492,49 @@ async function startServer() {
         res.json({ success: true, id: result.lastInsertRowid });
       } catch (error) {
         res.status(500).json({ error: (error as Error).message });
+      }
+    });
+
+    // Newsletter Management
+    app.get("/api/newsletter/subscribers", (req, res) => {
+      try {
+        const subscribers = db.prepare("SELECT * FROM newsletter_subscriptions ORDER BY subscribed_at DESC").all();
+        res.json(subscribers);
+      } catch (error) {
+        res.status(500).json({ error: (error as Error).message });
+      }
+    });
+
+    app.post("/api/newsletter/send", (req, res) => {
+      const { subject, message } = req.body;
+      try {
+        const subscribers = db.prepare("SELECT email FROM newsletter_subscriptions").all() as { email: string }[];
+        
+        if (subscribers.length === 0) {
+          return res.status(400).json({ error: "No subscribers found to send to." });
+        }
+
+        // Note: Actual email dispatching logic (e.g., via Nodemailer) should be implemented here.
+        console.log(`Newsletter Broadcast: Sending "${subject}" to ${subscribers.length} recipients.`);
+        
+        res.json({ success: true, recipientCount: subscribers.length });
+      } catch (error) {
+        res.status(500).json({ error: (error as Error).message });
+      }
+    });
+
+    // Newsletter
+    app.post("/api/newsletter/subscribe", (req, res) => {
+      const { email } = req.body;
+      try {
+        db.prepare("INSERT INTO newsletter_subscriptions (email) VALUES (?)").run(email);
+        res.json({ success: true });
+      } catch (error: any) {
+        if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+          res.status(400).json({ error: "Email already subscribed" });
+        } else {
+          res.status(500).json({ error: (error as Error).message });
+        }
       }
     });
 

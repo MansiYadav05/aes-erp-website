@@ -1,8 +1,57 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Facebook, Twitter, Linkedin, Instagram, Mail, Phone, MapPin, ArrowUpRight } from 'lucide-react';
+import {
+  Facebook, Twitter, Linkedin, Instagram, Mail, Phone, MapPin,
+  ArrowUpRight, CheckCircle, X
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 
 export const Footer = () => {
+  const [email, setEmail] = useState('');
+  const [status, setStatus] = useState<'idle' | 'loading' | 'success'>('idle');
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
+
+  const handleSubscribe = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email || status === 'loading') return;
+
+    setStatus('loading');
+    try {
+      const response = await fetch('/api/newsletter/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      });
+
+      if (response.ok) {
+        setStatus('success');
+        setEmail('');
+        setToast({ message: 'Successfully subscribed to newsletter!', type: 'success' });
+        setTimeout(() => setStatus('idle'), 3000);
+      } else {
+        let errorMessage = 'Failed to subscribe.';
+        const contentType = response.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorMessage;
+        }
+        setToast({ message: errorMessage, type: 'error' });
+        setStatus('idle');
+      }
+    } catch (error) {
+      console.error('Subscription error:', error);
+      setToast({ message: 'Failed to subscribe. Please try again.', type: 'error' });
+      setStatus('idle');
+    }
+  };
+
   return (
     <footer className="bg-black text-white pt-20 pb-10 border-t border-white/10">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -81,14 +130,25 @@ export const Footer = () => {
           <div>
             <h4 className="text-lg font-bold mb-6">Newsletter</h4>
             <p className="text-gray-400 mb-4 text-sm">Subscribe to get the latest industrial insights and product updates.</p>
-            <form className="relative">
-              <input 
-                type="email" 
-                placeholder="Your email" 
+            <form onSubmit={handleSubscribe} className="relative">
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Your email"
                 className="w-full bg-white/5 border border-white/10 rounded-lg py-3 px-4 focus:outline-none focus:border-emerald-500 transition-colors"
               />
-              <button className="absolute right-2 top-2 bg-emerald-600 hover:bg-emerald-700 p-1.5 rounded-md transition-colors">
-                <ArrowUpRight className="w-4 h-4" />
+              <button
+                type="submit"
+                disabled={status === 'loading'}
+                className="absolute right-2 top-2 bg-emerald-600 hover:bg-emerald-700 p-1.5 rounded-md transition-colors disabled:opacity-50"
+              >
+                {status === 'success' ? (
+                  <CheckCircle className="w-4 h-4" />
+                ) : (
+                  <ArrowUpRight className="w-4 h-4" />
+                )}
               </button>
             </form>
           </div>
@@ -105,6 +165,22 @@ export const Footer = () => {
           </div>
         </div>
       </div>
+
+      {/* Toast Notification */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, x: '-50%' }}
+            animate={{ opacity: 1, y: 0, x: '-50%' }}
+            exit={{ opacity: 0, y: 50, x: '-50%' }}
+            className={`fixed bottom-10 left-1/2 z-[100] px-8 py-4 rounded-2xl shadow-2xl flex items-center space-x-3 border ${toast.type === 'success' ? 'bg-emerald-600 border-emerald-500 text-white' : 'bg-red-600 border-red-500 text-white'
+              }`}
+          >
+            {toast.type === 'success' ? <CheckCircle className="w-5 h-5 shrink-0" /> : <X className="w-5 h-5 shrink-0" />}
+            <span className="font-bold text-sm whitespace-nowrap">{toast.message}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </footer>
   );
 };

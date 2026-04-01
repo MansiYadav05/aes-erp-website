@@ -130,6 +130,13 @@ CREATE TABLE IF NOT EXISTS order_items (
     FOREIGN KEY (machine_id) REFERENCES machines (id)
 );
 
+-- Newsletter Subscriptions table
+CREATE TABLE IF NOT EXISTS newsletter_subscriptions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT UNIQUE NOT NULL,
+    subscribed_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Seed data for Departments
 INSERT
     OR IGNORE INTO departments (name, description)
@@ -275,8 +282,15 @@ CREATE TABLE IF NOT EXISTS workplace_settings (
 );
 
 -- Seed Default Settings if not exists
-INSERT OR IGNORE INTO workplace_settings (id, lat, lng, allowed_radius_meters) 
-VALUES (1, 18.7086, 73.8053, 100.0); -- CHANGE HERE: Replace with your Factory's Latitude and Longitude
+INSERT
+    OR IGNORE INTO workplace_settings (
+        id,
+        lat,
+        lng,
+        allowed_radius_meters
+    )
+VALUES (1, 18.7086, 73.8053, 100.0);
+-- CHANGE HERE: Replace with your Factory's Latitude and Longitude
 
 -- Attendance Logs (All attempts)
 CREATE TABLE IF NOT EXISTS attendance_logs (

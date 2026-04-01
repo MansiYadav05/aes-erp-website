@@ -114,7 +114,7 @@ export const Products = () => {
                           </div>
                           <div>
                             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Major Client</p>
-                            <p className="text-sm font-bold text-gray-900">{machine.sold_to || 'Available for Order'}</p>
+                            <p className="text-sm font-bold text-gray-900">{machine.sold_to || 'FORD'}</p>
                           </div>
                         </div>
                         <Link 

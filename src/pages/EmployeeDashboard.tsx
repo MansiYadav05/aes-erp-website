@@ -104,9 +104,32 @@ export const EmployeeDashboard = () => {
     });
   };
 
+  const today = new Date();
+  const currentMonthStr = today.toISOString().slice(0, 7);
+  const presentThisMonth = attendance.filter(a => a.status === 'present' && a.date.startsWith(currentMonthStr)).length;
+
   const presentDays = attendance.filter(a => a.status === 'present').length;
-  const absentDays = attendance.filter(a => a.status === 'absent').length;
+  const absentDays = Math.max(0, today.getDate() - presentThisMonth);
   const completedTasksCount = tasks.filter(t => t.status === 'completed').length;
+
+  const nextPayoutDate = (() => {
+    const now = new Date();
+    let targetMonth = now.getMonth();
+    let targetYear = now.getFullYear();
+
+    if (salaryHistory.length > 0) {
+      const latest = salaryHistory[0];
+      const [mName, yStr] = latest.month_year.split(' ');
+      const lastPaidDate = new Date(`${mName} 1, ${yStr}`);
+
+      const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      if (lastPaidDate >= currentMonthStart) {
+        targetMonth = lastPaidDate.getMonth() + 1;
+        targetYear = lastPaidDate.getFullYear();
+      }
+    }
+    return new Date(targetYear, targetMonth + 1, 0).toLocaleDateString('default', { month: 'long', day: 'numeric', year: 'numeric' });
+  })();
 
 
   const getGreeting = () => {
@@ -120,7 +143,7 @@ export const EmployeeDashboard = () => {
     const doc = new jsPDF();
 
     // Colors
-    const emerald = [0, 0, 0]; // Changed to Black as requested
+    const emerald = [0, 0, 0];
     const dark = [20, 20, 20];
     const gray = [100, 100, 100];
     const lightGray = [245, 245, 245];
@@ -129,7 +152,7 @@ export const EmployeeDashboard = () => {
     doc.setFillColor(emerald[0], emerald[1], emerald[2]);
     doc.rect(0, 0, 210, 50, 'F');
 
-    // Logo / Company Name
+    // Company Name
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(30);
     doc.setFont("helvetica", "bold");
@@ -305,7 +328,7 @@ export const EmployeeDashboard = () => {
                 <div className="flex justify-between items-center mb-8">
                   <div>
                     <h1 className="text-3xl font-bold">{getGreeting()}, {profile?.first_name}!</h1>
-                    <p className="text-gray-500">Here's what's happening today at AESERP.</p>
+                    <p className="text-gray-500">Here's what's happening today at AES!</p>
                   </div>
                   <div className="flex space-x-3">
                     <button
@@ -338,7 +361,7 @@ export const EmployeeDashboard = () => {
                       <Calendar className="text-purple-600 w-6 h-6" />
                     </div>
                     <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Attendance Rate</p>
-                    <h3 className="text-4xl font-black">{attendance.length > 0 ? Math.round((presentDays / attendance.length) * 100) : 0}%</h3>
+                    <h3 className="text-4xl font-black">{Math.round((presentThisMonth / today.getDate()) * 100)}%</h3>
                   </div>
                 </div>
 
@@ -588,7 +611,7 @@ export const EmployeeDashboard = () => {
                       <p className="text-2xl font-bold">+₹{(completedTasksCount * (profile?.task_bonus_rate || 50)).toLocaleString()}</p>
                     </div>
                     <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-1">Next Payout</p>
-                    <p className="text-lg font-bold">March 31, 2024</p>
+                    <p className="text-lg font-bold">{nextPayoutDate}</p>
                   </div>
                 </div>
 

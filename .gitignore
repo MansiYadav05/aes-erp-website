@@ -9,3 +9,4 @@ database/erp.db
 !.env.example
 *.db
 erp.db
+location.txt
