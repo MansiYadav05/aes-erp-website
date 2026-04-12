@@ -107,6 +107,7 @@ export const AdminDashboard = () => {
   const [notificationForm, setNotificationForm] = useState({ user_id: '', title: '', message: '' });
   const [taskForm, setTaskForm] = useState({ title: '', description: '', assigned_to: '', deadline: '' });
   const [machineForm, setMachineForm] = useState({ name: '', model_number: '', description: '', price: 0, specifications: '{}' });
+  const [taskEmployeeSearch, setTaskEmployeeSearch] = useState('');
   const [newsletterForm, setNewsletterForm] = useState({ subject: '', message: '' });
 
   // Payroll state
@@ -200,6 +201,7 @@ export const AdminDashboard = () => {
       body: JSON.stringify(taskForm)
     });
     setTaskForm({ title: '', description: '', assigned_to: '', deadline: '' });
+    setTaskEmployeeSearch('');
     fetchData();
     alert('Task assigned!');
   };
@@ -729,6 +731,16 @@ export const AdminDashboard = () => {
                           </div>
                           <div>
                             <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Assign To</label>
+                            <div className="relative mb-2">
+                              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                              <input
+                                type="text"
+                                placeholder="Search name or ID..."
+                                value={taskEmployeeSearch}
+                                onChange={(e) => setTaskEmployeeSearch(e.target.value)}
+                                className="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-100 rounded-xl text-xs focus:outline-none focus:border-black transition-all"
+                              />
+                            </div>
                             <select
                               required
                               value={taskForm.assigned_to}
@@ -736,9 +748,18 @@ export const AdminDashboard = () => {
                               className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:border-black transition-all"
                             >
                               <option value="">Select Employee</option>
-                              {employees.map(e => (
-                                <option key={e.id} value={e.id}>{e.first_name} {e.last_name}</option>
-                              ))}
+                              {employees
+                                .filter(e => {
+                                  const fullName = `${e.first_name} ${e.last_name}`.toLowerCase();
+                                  const shortId = e.id.slice(0, 8).toLowerCase();
+                                  const search = taskEmployeeSearch.toLowerCase();
+                                  return fullName.includes(search) || shortId.includes(search);
+                                })
+                                .map(e => (
+                                  <option key={e.id} value={e.id}>
+                                    #{e.id.slice(0, 8).toUpperCase()} - {e.first_name} {e.last_name}
+                                  </option>
+                                ))}
                             </select>
                           </div>
                           <div>
