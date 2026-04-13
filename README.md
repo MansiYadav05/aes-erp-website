@@ -6,9 +6,11 @@ A full-stack Enterprise Resource Planning (ERP) system designed for industrial b
 
 ### Admin Dashboard
 - **Employee Management**: Add, edit, and manage employee profiles with role assignments and salary tracking
+- **Search & Filters**: Real-time staff searching and department-based filtering
 - **Task Management**: Assign and track tasks across the organization with deadlines and status updates
 - **Contact Inquiries**: Manage customer inquiries and meeting scheduling
 - **Broadcast Notifications**: Send notifications to employees or specific users
+- **Newsletter Management**: View subscriber lists and compose broadcast messages to all registered emails
 - **Content Management System (CMS)**: Edit website content including Home, About, Products, Services, and Contact pages via JSON editor
 - **System Overview**: Dashboard with key metrics (total workforce, inquiries, active tasks)
 
@@ -24,6 +26,7 @@ A full-stack Enterprise Resource Planning (ERP) system designed for industrial b
 - **Products**: Showcase industrial products and machinery
 - **Services**: Service offerings and capabilities
 - **Contact**: Customer inquiry form for meeting requests
+- **Newsletter**: Subscription form in the footer for industrial insights and updates
 
 ### Authentication & Security
 - Firebase Authentication integration
@@ -38,6 +41,7 @@ A full-stack Enterprise Resource Planning (ERP) system designed for industrial b
 - Salary history and payroll
 - Machinery/products catalog
 - Website content management
+- **Newsletter email** subscriptions
 - Contact inquiry storage
 
 ## 📋 Tech Stack
@@ -51,6 +55,7 @@ A full-stack Enterprise Resource Planning (ERP) system designed for industrial b
 - **Framer Motion** 12.23 - Animation library
 - **Lucide React** - Icon library
 - **Firebase** 12.10 - Authentication
+- **jsPDF** - PDF generation for payslips
 
 ### Backend
 - **Express.js** 4.21 - Web server framework
@@ -153,6 +158,9 @@ The system uses SQLite with the following main tables:
 - **inquiries** - Customer contact inquiries
 - **website_content** - CMS for website pages
 - **machines** - Industrial machinery/products catalog
+- **workplace_settings** - Geo-fence coordinates and radius
+- **attendance_logs** - Audit trail for all clock-in attempts
+- **newsletter_subscriptions** - Email marketing database
 
 ## 🔐 Authentication Flow
 
@@ -220,6 +228,11 @@ The system uses SQLite with the following main tables:
 ### Departments
 - `GET /api/departments` - Fetch all departments
 
+### Newsletter
+- `GET /api/newsletter/subscribers` - Fetch all email subscribers
+- `POST /api/newsletter/subscribe` - Register a new email for updates
+- `POST /api/newsletter/send` - Broadcast a message to all subscribers
+
 ## 🛡️ Security Best Practices
 
 - ✅ Role-based access control (RBAC)
@@ -281,5 +294,5 @@ For issues, feature requests, or questions, please contact the development team.
 ---
 
 **Version**: 2.0  
-**Last Updated**: March 2026  
-**Status**: Active Development
+**Last Updated**: April 2026  
+**Status**: Completed
