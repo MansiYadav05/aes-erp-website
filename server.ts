@@ -12,8 +12,12 @@ const dbPath = path.join(__dirname, "database", "erp.db");
 const schemaPath = path.join(__dirname, "database", "schema.sql");
 
 // Ensure database directory exists
-if (!fs.existsSync(path.join(__dirname, "database"))) {
-  fs.mkdirSync(path.join(__dirname, "database"));
+try {
+  if (!fs.existsSync(path.join(__dirname, "database"))) {
+    fs.mkdirSync(path.join(__dirname, "database"), { recursive: true });
+  }
+} catch (e) {
+  console.warn("Database directory creation skipped (expected in some serverless environments)");
 }
 
 const db = new Database(dbPath);
@@ -48,14 +52,18 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
   return R * c;
 }
 
-async function startServer() {
-  try {
-    const app = express();
-    const PORT = 3000;
+const app = express();
+const PORT = process.env.PORT || 3000;
 
+async function setupApp() {
     app.use(express.json());
 
     // --- API Routes ---
+
+    // Health check for keep-alive pings
+    app.get("/api/health", (req, res) => {
+      res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
+    });
 
     // Auth/User Sync
     app.post("/api/users/sync", (req, res) => {
@@ -551,14 +559,17 @@ async function startServer() {
         res.sendFile(path.join(__dirname, "dist", "index.html"));
       });
     }
-
-    app.listen(PORT, "0.0.0.0", () => {
-      console.log(`Server running on http://localhost:${PORT}`);
-    });
-  } catch (error) {
-    console.error('Failed to start server:', error);
-    process.exit(1);
-  }
 }
 
-startServer();
+// Initialize the app configuration
+await setupApp();
+
+// Only listen on a port if we're not on Vercel (local dev or traditional VPS)
+if (!process.env.VERCEL) {
+  app.listen(Number(PORT), "0.0.0.0", () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+}
+
+// Export the app for Vercel serverless functions
+export default app;
