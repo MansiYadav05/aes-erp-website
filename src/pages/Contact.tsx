@@ -317,7 +317,7 @@ export const Contact = () => {
               <p className="text-sm text-gray-500">Dehu Alandi Road,Talawade Pune.</p>
             </div>
             <a 
-              href="https://maps.google.com" 
+              href="https://www.google.com/maps/embed?pb=!1m13!1m8!1m3!1d3592.317435687847!2d73.79286788159212!3d18.694720140296425!3m2!1i1024!2i768!4f13.1!3m2!1m1!2zMTjCsDQxJzQxLjIiTiA3M8KwNDcnMzUuOSJF!5e1!3m2!1sen!2sin!4v1790436500589!5m2!1sen!2sin" 
               target="_blank" 
               rel="noopener noreferrer"
               className="px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-bold hover:bg-gray-50 transition-colors"
@@ -326,15 +326,7 @@ export const Contact = () => {
             </a>
           </div>
           <div className="h-[450px] w-full grayscale contrast-125 hover:grayscale-0 transition-all duration-700">
-            <iframe
-              src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3153.8354345093747!2d-122.4194154846816!3d37.77492957975948!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x8085809c6c8f4459%3A0xb10ed6d9b5050fa5!2sTwitter%20HQ!5e0!3m2!1sen!2sus!4v1652345678901!5m2!1sen!2sus"
-              width="100%"
-              height="100%"
-              style={{ border: 0 }}
-              allowFullScreen={true}
-              loading="lazy"
-              referrerPolicy="no-referrer-when-downgrade"
-            ></iframe>
+              <iframe title="Map to Authensia Equipment Systems headquarters" src="https://www.google.com/maps/embed?pb=!1m13!1m8!1m3!1d3592.317435687847!2d73.79286788159212!3d18.694720140296425!3m2!1i1024!2i768!4f13.1!3m2!1m1!2zMTjCsDQxJzQxLjIiTiA3M8KwNDcnMzUuOSJF!5e1!3m2!1sen!2sin!4v1790436500589!5m2!1sen!2sin"  className="h-full w-full border-0" allowFullScreen  loading="lazy" referrerPolicy="strict-origin-when-cross-origin"  />
           </div>
         </motion.div>
       </div>
