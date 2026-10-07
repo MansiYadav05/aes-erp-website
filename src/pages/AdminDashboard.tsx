@@ -770,6 +770,7 @@ export const AdminDashboard = () => {
                       <thead className="bg-gray-50 border-b border-gray-100">
                         <tr>
                           <th className="px-8 py-5 text-xs font-bold text-gray-400 uppercase tracking-widest">Employee</th>
+                          <th className="px-4 py-5 text-xs font-bold text-gray-400 uppercase tracking-widest">Employee ID</th>
                           <th className="px-8 py-5 text-xs font-bold text-gray-400 uppercase tracking-widest">Role & Dept</th>
                           <th className="px-8 py-5 text-xs font-bold text-gray-400 uppercase tracking-widest">Salary</th>
                           <th className="px-8 py-5 text-xs font-bold text-gray-400 uppercase tracking-widest">Employment Status</th>
@@ -795,6 +796,9 @@ export const AdminDashboard = () => {
                                   <p className="text-xs text-gray-400">{emp.email}</p>
                                 </div>
                               </div>
+                            </td>
+                            <td className="px-4 py-5 text-sm font-bold text-gray-700 whitespace-nowrap">
+                              #{emp.id?.slice(0, 8).toUpperCase()}
                             </td>
                             <td className="px-8 py-5">
                               <p className="text-sm font-bold text-gray-700">{emp.role_title || 'Unassigned'}</p>
