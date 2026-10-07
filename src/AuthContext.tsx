@@ -9,7 +9,7 @@ interface AuthContextType {
   isEmployee: boolean;
   profile: any | null;
   refreshProfile: () => Promise<void>;
-  syncUser: (role?: string, profileData?: { phone?: string; address?: string }) => Promise<void>;
+  syncUser: (role?: string, profileData?: { displayName?: string; phone?: string; address?: string }) => Promise<string | null>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -19,7 +19,7 @@ const AuthContext = createContext<AuthContextType>({
   isEmployee: false,
   profile: null,
   refreshProfile: async () => { },
-  syncUser: async () => { }
+  syncUser: async () => null
 });
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -41,18 +41,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, []);
 
-  const syncUser = useCallback(async (role?: string, profileData?: { phone?: string; address?: string }) => {
+  const syncUser = useCallback(async (role?: string, profileData?: { displayName?: string; phone?: string; address?: string }): Promise<string | null> => {
     const currentUser = auth.currentUser;
-    if (!currentUser) return;
+    if (!currentUser) return null;
 
     try {
+      const idToken = await currentUser.getIdToken();
       const res = await fetch('/api/users/sync', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
         body: JSON.stringify({
           id: currentUser.uid,
           email: currentUser.email,
-          displayName: currentUser.displayName || currentUser.email?.split('@')[0],
+          displayName: profileData?.displayName?.trim() || currentUser.displayName?.trim() || null,
           role: role,
           phone: profileData?.phone,
           address: profileData?.address
@@ -61,7 +62,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (res.ok) {
         const { user: dbUser } = await res.json();
-        const isSystemAdmin = dbUser.role === 'admin' || currentUser.email === 'admin@industrial.com';
+        const isSystemAdmin = dbUser.role === 'admin';
         setIsAdmin(isSystemAdmin);
         setIsEmployee(dbUser.role === 'employee' && !isSystemAdmin);
 
@@ -70,10 +71,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } else {
           setProfile(null);
         }
+        return dbUser.role;
       }
     } catch (err) {
       console.error('Sync error:', err);
     }
+    return null;
   }, [fetchProfile]);
 
   useEffect(() => {

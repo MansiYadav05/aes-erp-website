@@ -17,32 +17,56 @@ export const AuthPage = ({ mode }: { mode: 'login' | 'signup' }) => {
   const [role, setRole] = useState<'admin' | 'employee'>('employee');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setNotice('');
     setLoading(true);
 
     try {
       if (mode === 'signup') {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-        await updateProfile(userCredential.user, { displayName: name });
+        const displayName = name.trim();
+        await updateProfile(userCredential.user, { displayName });
 
-        // Use syncUser from context to update global state with additional profile data
-        await syncUser(role, {
+        await syncUser('employee', {
+          displayName,
           phone: `${countryCode}${phone}`,
           address: address
         });
+        navigate('/dashboard');
       } else {
-        await signInWithEmailAndPassword(auth, email, password);
-        // Re-sync to get the correct role state
-        await syncUser();
-      }
+        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        const syncedRole = await syncUser();
+        if (!syncedRole) throw new Error('Unable to verify your account. Please try again.');
 
-      // The ProtectedRoute will handle the actual redirection based on updated context state
-      navigate('/dashboard');
+        if (role === 'admin') {
+          const idToken = await userCredential.user.getIdToken();
+          const response = await fetch('/api/admin-access-requests', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` }
+          });
+          const result = await response.json();
+          if (!response.ok) {
+            await auth.signOut();
+            throw new Error(result.error || 'Could not submit the admin access request.');
+          }
+          if (!result.approved) {
+            await auth.signOut();
+            setNotice('Your Admin access request has been sent to the primary administrator for approval.');
+            return;
+          }
+
+          navigate('/admin');
+          return;
+        }
+
+        navigate(syncedRole === 'admin' ? '/admin' : '/dashboard');
+      }
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -72,6 +96,11 @@ export const AuthPage = ({ mode }: { mode: 'login' | 'signup' }) => {
         {error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-100 text-red-600 text-sm rounded-xl">
             {error}
+          </div>
+        )}
+        {notice && (
+          <div className="mb-6 p-4 bg-emerald-50 border border-emerald-100 text-emerald-800 text-sm rounded-xl" role="status">
+            {notice}
           </div>
         )}
 
@@ -220,36 +249,6 @@ export const AuthPage = ({ mode }: { mode: 'login' | 'signup' }) => {
               </button>
             </div>
           </div>
-
-          {mode === 'signup' && (
-            <div>
-              <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 ml-1">Select Role</label>
-              <div className="grid grid-cols-2 gap-4">
-                <button
-                  type="button"
-                  onClick={() => setRole('employee')}
-                  className={`flex items-center justify-center p-3 rounded-xl border transition-all ${role === 'employee'
-                      ? 'bg-black text-white border-black'
-                      : 'bg-gray-50 text-gray-500 border-gray-100 hover:border-gray-300'
-                    }`}
-                >
-                  <Briefcase className="w-4 h-4 mr-2" />
-                  <span className="text-sm font-bold">Employee</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setRole('admin')}
-                  className={`flex items-center justify-center p-3 rounded-xl border transition-all ${role === 'admin'
-                      ? 'bg-black text-white border-black'
-                      : 'bg-gray-50 text-gray-500 border-gray-100 hover:border-gray-300'
-                    }`}
-                >
-                  <Shield className="w-4 h-4 mr-2" />
-                  <span className="text-sm font-bold">Admin</span>
-                </button>
-              </div>
-            </div>
-          )}
 
           <button
             type="submit"

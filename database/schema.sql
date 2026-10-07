@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS employees (
     task_bonus_rate REAL DEFAULT 50.0,
     hire_date DATE DEFAULT CURRENT_DATE,
     status TEXT DEFAULT 'active',
+    availability_status TEXT NOT NULL DEFAULT 'On Duty',
     FOREIGN KEY (id) REFERENCES users (id),
     FOREIGN KEY (department_id) REFERENCES departments (id)
 );
@@ -302,4 +303,15 @@ CREATE TABLE IF NOT EXISTS attendance_logs (
     status TEXT, -- 'Present' or 'Rejected'
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (employee_id) REFERENCES employees (id)
+);
+
+CREATE TABLE IF NOT EXISTS admin_access_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL,
+    email TEXT NOT NULL,
+    display_name TEXT,
+    phone TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
+    requested_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    reviewed_at DATETIME
 );

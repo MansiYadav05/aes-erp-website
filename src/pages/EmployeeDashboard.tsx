@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  User, Briefcase, Calendar, Clock, Bell, CheckCircle,
+  User, Briefcase, Calendar, Bell, CheckCircle,
   IndianRupee, MapPin, Phone, Mail, Award, ArrowRight, Loader,
   TrendingUp, AlertCircle, X, Download
 } from 'lucide-react';
@@ -18,6 +18,7 @@ export const EmployeeDashboard = () => {
   const [salaryHistory, setSalaryHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isClockingIn, setIsClockingIn] = useState(false);
+  const [isUpdatingAvailability, setIsUpdatingAvailability] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -53,6 +54,25 @@ export const EmployeeDashboard = () => {
       body: JSON.stringify({ status })
     });
     fetchEmployeeData();
+  };
+
+  const handleUpdateAvailability = async (availabilityStatus: string) => {
+    if (!user || isUpdatingAvailability) return;
+
+    setIsUpdatingAvailability(true);
+    try {
+      const response = await fetch(`/api/employees/${user.uid}/availability`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ availability_status: availabilityStatus })
+      });
+      if (!response.ok) throw new Error('Failed to update availability');
+      await refreshProfile();
+    } catch (error) {
+      console.error('Availability update error:', error);
+    } finally {
+      setIsUpdatingAvailability(false);
+    }
   };
 
   const handleMarkAttendance = async () => {
@@ -309,8 +329,19 @@ export const EmployeeDashboard = () => {
             <span>Logout</span>
           </button>
           <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100">
-            <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest mb-1">Shift Status</p>
-            <p className="text-xs font-bold text-emerald-900">Active • On Duty</p>
+            <label htmlFor="availability-status" className="block text-[10px] font-bold text-emerald-600 uppercase tracking-widest mb-1">Shift Status</label>
+            <select
+              id="availability-status"
+              value={profile?.availability_status || 'On Duty'}
+              onChange={(event) => handleUpdateAvailability(event.target.value)}
+              disabled={isUpdatingAvailability}
+              className="w-full bg-transparent text-xs font-bold text-emerald-900 focus:outline-none disabled:opacity-60"
+            >
+              <option>On Duty</option>
+              <option>On Break</option>
+              <option>Away</option>
+              <option>Off Duty</option>
+            </select>
           </div>
         </div>
       </div>

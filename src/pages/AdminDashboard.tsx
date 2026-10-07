@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import {
   Users, BarChart3, Plus, Trash2, Edit2, MessageSquare,
-  Layout, CheckCircle, Clock, Bell, Send, Briefcase,
-  Settings, Globe, Info, Package, Phone, Mail, MapPin, IndianRupee, RefreshCw, Search,
-  Calendar, Cpu, Shield, ArrowRight, X, ExternalLink, FileText
+  Layout, CheckCircle, Bell, Send,
+  Settings, Globe, Info, Package, Mail, MapPin, IndianRupee, RefreshCw, Search, Cpu, Shield, X, FileText
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { auth } from '../firebase';
@@ -85,6 +84,8 @@ export const AdminDashboard = () => {
   const [machines, setMachines] = useState<any[]>([]);
   const [subscribers, setSubscribers] = useState<any[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
+  const [adminAccessRequests, setAdminAccessRequests] = useState<any[]>([]);
+  const [reviewingRequestId, setReviewingRequestId] = useState<number | null>(null);
   const [geoSettings, setGeoSettings] = useState({ lat: 0, lng: 0, allowed_radius_meters: 100 });
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -126,6 +127,56 @@ export const AdminDashboard = () => {
   useEffect(() => {
     fetchData();
   }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+    const refreshAdminAccessRequests = async () => {
+      if (document.visibilityState !== 'visible' || !auth.currentUser) return;
+
+      try {
+        const idToken = await auth.currentUser.getIdToken();
+        const response = await fetch('/api/admin-access-requests', {
+          headers: { Authorization: `Bearer ${idToken}` }
+        });
+        if (!response.ok) return;
+        const requests = await response.json();
+        if (isMounted) setAdminAccessRequests(requests);
+      } catch (error) {
+        console.error('Error fetching admin access requests:', error);
+      }
+    };
+
+    refreshAdminAccessRequests();
+    const intervalId = window.setInterval(refreshAdminAccessRequests, 5000);
+    return () => {
+      isMounted = false;
+      window.clearInterval(intervalId);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (activeTab !== 'employees') return;
+
+    let isMounted = true;
+    const refreshEmployees = async () => {
+      if (document.visibilityState !== 'visible') return;
+
+      try {
+        const response = await fetch('/api/employees');
+        if (!response.ok) return;
+        const latestEmployees = await response.json();
+        if (isMounted) setEmployees(latestEmployees);
+      } catch (error) {
+        console.error('Error refreshing employee availability:', error);
+      }
+    };
+
+    const intervalId = window.setInterval(refreshEmployees, 2000);
+    return () => {
+      isMounted = false;
+      window.clearInterval(intervalId);
+    };
+  }, [activeTab]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -179,6 +230,32 @@ export const AdminDashboard = () => {
     if (confirm('Delete this inquiry?')) {
       await fetch(`/api/inquiries/${id}`, { method: 'DELETE' });
       fetchData();
+    }
+  };
+
+  const handleReviewAdminAccess = async (requestId: number, action: 'approve' | 'cancel') => {
+    if (!auth.currentUser || reviewingRequestId !== null) return;
+
+    setReviewingRequestId(requestId);
+    try {
+      const idToken = await auth.currentUser.getIdToken();
+      const response = await fetch(`/api/admin-access-requests/${requestId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ action })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Could not review the request.');
+
+      setAdminAccessRequests(requests => requests.filter(request => request.id !== requestId));
+      setToast({
+        message: action === 'approve' ? 'Admin access approved.' : 'Admin access request cancelled.',
+        type: 'success'
+      });
+    } catch (error) {
+      setToast({ message: error instanceof Error ? error.message : 'Could not review the request.', type: 'error' });
+    } finally {
+      setReviewingRequestId(null);
     }
   };
 
@@ -279,7 +356,6 @@ export const AdminDashboard = () => {
           : parseInt(String(editingEmployee.department_id)),
         salary_monthly: parseFloat(String(editingEmployee.salary_monthly ?? 0)),
         task_bonus_rate: parseFloat(String(editingEmployee.task_bonus_rate ?? 50)),
-        status: editingEmployee.status || 'active',
         role: editingEmployee.role || 'employee'
       };
 
@@ -484,6 +560,7 @@ export const AdminDashboard = () => {
         <nav className="space-y-1 flex-1">
           {[
             { id: 'overview', label: 'Dashboard', icon: BarChart3 },
+            { id: 'admin-access', label: 'Admin Access', icon: Shield },
             { id: 'employees', label: 'Employees', icon: Users },
             { id: 'tasks', label: 'Tasks', icon: CheckCircle },
             { id: 'inquiries', label: 'Enquiries', icon: MessageSquare },
@@ -501,7 +578,12 @@ export const AdminDashboard = () => {
                 }`}
             >
               <tab.icon className="w-5 h-5" />
-              <span>{tab.label}</span>
+              <span className="flex-1 text-left">{tab.label}</span>
+              {tab.id === 'admin-access' && adminAccessRequests.length > 0 && (
+                <span className="min-w-5 h-5 px-1 rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center">
+                  {adminAccessRequests.length}
+                </span>
+              )}
             </button>
           ))}
         </nav>
@@ -599,6 +681,55 @@ export const AdminDashboard = () => {
                 </motion.div>
               )}
 
+              {activeTab === 'admin-access' && (
+                <motion.div key="admin-access" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
+                  <div className="flex items-center justify-between mb-8">
+                    <div>
+                      <h1 className="text-3xl font-bold">Admin Access Requests</h1>
+                      <p className="text-sm text-gray-500 mt-1">Review verified accounts requesting administrator access.</p>
+                    </div>
+                    <span className="px-3 py-1 rounded-full bg-amber-50 text-amber-700 text-xs font-bold">
+                      {adminAccessRequests.length} Pending
+                    </span>
+                  </div>
+
+                  {adminAccessRequests.length === 0 ? (
+                    <div className="bg-white border border-gray-100 rounded-2xl p-10 text-center text-sm text-gray-500">
+                      No pending admin access requests.
+                    </div>
+                  ) : (
+                    <div className="bg-white border border-gray-100 rounded-2xl divide-y divide-gray-100">
+                      {adminAccessRequests.map((request) => (
+                        <div key={request.id} className="flex flex-wrap items-center justify-between gap-5 p-6">
+                          <div className="min-w-0">
+                            <p className="font-bold text-gray-900">{request.display_name || 'Name not provided'}</p>
+                            <p className="text-sm text-gray-500">{request.email}</p>
+                            <p className="text-xs text-gray-500">Phone: {request.phone || 'Not provided'}</p>
+                            <p className="text-xs text-gray-400 mt-1">Account ID: {request.user_id} · Requested {request.requested_at}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleReviewAdminAccess(request.id, 'cancel')}
+                              disabled={reviewingRequestId !== null}
+                              className="px-4 py-2 border border-gray-200 rounded-lg text-sm font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              onClick={() => handleReviewAdminAccess(request.id, 'approve')}
+                              disabled={reviewingRequestId !== null}
+                              className="px-4 py-2 bg-emerald-600 rounded-lg text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
+                            >
+                              Approve
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </motion.div>
+              )}
+
               {activeTab === 'employees' && (
                 <motion.div key="employees" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
                   <div className="flex justify-between items-center mb-8">
@@ -641,7 +772,8 @@ export const AdminDashboard = () => {
                           <th className="px-8 py-5 text-xs font-bold text-gray-400 uppercase tracking-widest">Employee</th>
                           <th className="px-8 py-5 text-xs font-bold text-gray-400 uppercase tracking-widest">Role & Dept</th>
                           <th className="px-8 py-5 text-xs font-bold text-gray-400 uppercase tracking-widest">Salary</th>
-                          <th className="px-8 py-5 text-xs font-bold text-gray-400 uppercase tracking-widest">Status</th>
+                          <th className="px-8 py-5 text-xs font-bold text-gray-400 uppercase tracking-widest">Employment Status</th>
+                          <th className="px-8 py-5 text-xs font-bold text-gray-400 uppercase tracking-widest">Shift Status</th>
                           <th className="px-8 py-5 text-xs font-bold text-gray-400 uppercase tracking-widest text-right">Actions</th>
                         </tr>
                       </thead>
@@ -676,6 +808,9 @@ export const AdminDashboard = () => {
                                 }`}>
                                 {emp.status}
                               </span>
+                            </td>
+                            <td className="px-8 py-5 text-sm font-bold text-gray-700">
+                              {emp.availability_status || 'On Duty'}
                             </td>
                             <td className="px-8 py-5 text-right">
                               <div className="flex justify-end space-x-2">
@@ -1225,18 +1360,6 @@ export const AdminDashboard = () => {
                   onChange={(e) => setEditingEmployee({ ...editingEmployee, task_bonus_rate: e.target.value === '' ? 0 : parseFloat(e.target.value) })}
                   className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:border-black transition-all"
                 />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 ml-1">Status</label>
-                <select
-                  value={editingEmployee.status}
-                  onChange={(e) => setEditingEmployee({ ...editingEmployee, status: e.target.value })}
-                  className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:border-black transition-all"
-                >
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
-                  <option value="on_leave">On Leave</option>
-                </select>
               </div>
               <div>
                 <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 ml-1">Role</label>
