@@ -328,7 +328,7 @@ async function setupApp() {
 
   app.put("/api/employees/:id", (req, res) => {
     const body = req.body ?? {};
-    const {first_name, last_name, department_id, role_title, salary_monthly, task_bonus_rate, status, role} = body;
+    const { first_name, last_name, department_id, role_title, salary_monthly, task_bonus_rate, status, role } = body;
 
     const sanitizedFirstName = first_name || '';
     const sanitizedLastName = last_name || '';
@@ -443,11 +443,69 @@ async function setupApp() {
   });
 
   app.post("/api/notifications", (req, res) => {
-    const { user_id, title, message } = req.body;
+    const { user_id, department_id, title, message } = req.body ?? {};
     try {
-      db.prepare("INSERT INTO notifications (user_id, title, message) VALUES (?, ?, ?)")
-        .run(user_id || null, title, message);
-      res.json({ success: true });
+      if (!title || !message) {
+        return res.status(400).json({ error: 'Notification title and message are required' });
+      }
+
+      if (department_id !== undefined && department_id !== null) {
+        const departmentId = Number(department_id);
+        if (!Number.isInteger(departmentId)) {
+          return res.status(400).json({ error: 'Invalid department' });
+        }
+
+        const employeeIds = db.prepare(`
+          SELECT e.id
+          FROM employees e
+          JOIN users u ON u.id = e.id
+          WHERE e.department_id = ? AND u.role = 'employee'
+        `).all(departmentId) as { id: string }[];
+
+        if (employeeIds.length === 0) {
+          return res.status(400).json({ error: 'No employees are assigned to this department' });
+        }
+
+        const insertNotification = db.prepare(
+          "INSERT INTO notifications (user_id, title, message) VALUES (?, ?, ?)"
+        );
+        const sendToDepartment = db.transaction(() => {
+          for (const employee of employeeIds) {
+            insertNotification.run(employee.id, title, message);
+          }
+        });
+        sendToDepartment();
+        return res.json({ success: true, recipientCount: employeeIds.length });
+      }
+
+      if (user_id) {
+        const employee = db.prepare(`
+          SELECT e.id FROM employees e
+          JOIN users u ON u.id = e.id
+          WHERE e.id = ? AND u.role = 'employee'
+        `).get(user_id);
+        if (!employee) return res.status(404).json({ error: 'Employee not found' });
+
+        db.prepare("INSERT INTO notifications (user_id, title, message) VALUES (?, ?, ?)")
+          .run(user_id, title, message);
+        return res.json({ success: true, recipientCount: 1 });
+      }
+
+      const employees = db.prepare(`
+        SELECT e.id FROM employees e
+        JOIN users u ON u.id = e.id
+        WHERE u.role = 'employee'
+      `).all() as { id: string }[];
+      const insertNotification = db.prepare(
+        "INSERT INTO notifications (user_id, title, message) VALUES (?, ?, ?)"
+      );
+      const sendToAll = db.transaction(() => {
+        for (const employee of employees) {
+          insertNotification.run(employee.id, title, message);
+        }
+      });
+      sendToAll();
+      res.json({ success: true, recipientCount: employees.length });
     } catch (error) {
       res.status(500).json({ error: (error as Error).message });
     }
