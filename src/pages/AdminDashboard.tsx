@@ -261,13 +261,28 @@ export const AdminDashboard = () => {
 
   const handleSendNotification = async (e: React.FormEvent) => {
     e.preventDefault();
-    await fetch('/api/notifications', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(notificationForm)
-    });
-    setNotificationForm({ user_id: '', title: '', message: '' });
-    alert('Notification sent!');
+    const [targetType, targetId] = notificationForm.user_id.split(':');
+    const payload = targetType === 'department'
+      ? { ...notificationForm, user_id: '', department_id: Number(targetId) }
+      : notificationForm;
+
+    try {
+      const response = await fetch('/api/notifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Failed to send notification');
+
+      setNotificationForm({ user_id: '', title: '', message: '' });
+      setToast({
+        message: `Notification sent to ${result.recipientCount} employee${result.recipientCount === 1 ? '' : 's'}.`,
+        type: 'success'
+      });
+    } catch (error) {
+      setToast({ message: error instanceof Error ? error.message : 'Failed to send notification.', type: 'error' });
+    }
   };
 
   const handleAssignTask = async (e: React.FormEvent) => {
@@ -1162,9 +1177,18 @@ export const AdminDashboard = () => {
                           className="w-full px-4 py-3.5 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:border-black transition-all"
                         >
                           <option value="">All Employees (Broadcast)</option>
-                          {employees.map(e => (
-                            <option key={e.id} value={e.id}>{e.first_name} {e.last_name}</option>
-                          ))}
+                          <optgroup label="Departments">
+                            {departments.map(department => (
+                              <option key={`department-${department.id}`} value={`department:${department.id}`}>
+                                All employees in {department.name}
+                              </option>
+                            ))}
+                          </optgroup>
+                          <optgroup label="Individual Employees">
+                            {employees.map(e => (
+                              <option key={e.id} value={e.id}>{e.first_name} {e.last_name}</option>
+                            ))}
+                          </optgroup>
                         </select>
                       </div>
                       <div>
